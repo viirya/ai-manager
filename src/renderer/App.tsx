@@ -1,0 +1,289 @@
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import Sidebar from './components/Sidebar';
+import TabBar, { TabInfo } from './components/TabBar';
+import SessionView from './components/SessionView';
+import EmptyState from './components/EmptyState';
+import NewSessionModal from './components/NewSessionModal';
+import SettingsPanel from './components/SettingsPanel';
+import AboutDialog from './components/AboutDialog';
+import { useSessions } from './hooks/useSessions';
+import type { SessionInfo, SessionMeta } from '../shared/types';
+
+interface LiveTab {
+  sessionId: string;
+  title: string;
+  cwd: string;
+}
+
+export default function App() {
+  const { sessions, loading, refresh, deleteSession } = useSessions();
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [liveTabs, setLiveTabs] = useState<LiveTab[]>([]);
+  const [showNewSessionModal, setShowNewSessionModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+  const [sessionMeta, setSessionMeta] = useState<Record<string, SessionMeta>>({});
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const resizingRef = useRef(false);
+
+  // Load persisted state
+  useEffect(() => {
+    window.electronAPI.store.get('sessionMeta').then((val) => {
+      if (val && typeof val === 'object') setSessionMeta(val as Record<string, SessionMeta>);
+    });
+    window.electronAPI.store.get('settings.sidebarWidth').then((val) => {
+      if (typeof val === 'number' && val >= 200) setSidebarWidth(val);
+    });
+  }, []);
+
+  // Listen for menu events from main process
+  useEffect(() => {
+    const unsubs: (() => void)[] = [];
+    unsubs.push(window.electronAPI.on('menu:newSession', () => setShowNewSessionModal(true)));
+    unsubs.push(window.electronAPI.on('menu:closeTab', () => {
+      if (activeTabId) handleCloseTab(activeTabId);
+    }));
+    unsubs.push(window.electronAPI.on('menu:switchTab', (index: number) => {
+      if (liveTabs[index]) setActiveTabId(liveTabs[index].sessionId);
+    }));
+    unsubs.push(window.electronAPI.on('menu:focusSearch', () => searchRef.current?.focus()));
+    unsubs.push(window.electronAPI.on('menu:settings', () => setShowSettings(true)));
+    unsubs.push(window.electronAPI.on('menu:about', () => setShowAbout(true)));
+    unsubs.push(window.electronAPI.on('menu:toggleRaw', () => {
+      // This would need to be forwarded to the active SessionView.
+      // For simplicity, we'll toggle via a global event.
+      window.dispatchEvent(new CustomEvent('toggle-raw-terminal'));
+    }));
+    return () => unsubs.forEach((u) => u());
+  }, [activeTabId, liveTabs]);
+
+  const updateMeta = useCallback((sessionId: string, update: Partial<SessionMeta>) => {
+    setSessionMeta((prev) => {
+      const next = { ...prev, [sessionId]: { ...prev[sessionId], ...update } };
+      window.electronAPI.store.set('sessionMeta', next);
+      return next;
+    });
+  }, []);
+
+  const liveSessionIds = new Set(liveTabs.map((t) => t.sessionId));
+
+  const getTitle = useCallback(
+    (session: SessionInfo) => sessionMeta[session.id]?.customTitle || session.title,
+    [sessionMeta]
+  );
+
+  const handleSelect = useCallback(
+    (session: SessionInfo) => {
+      const existing = liveTabs.find((t) => t.sessionId === session.id);
+      if (existing) {
+        setActiveTabId(session.id);
+      } else {
+        setLiveTabs((prev) => [...prev, { sessionId: session.id, title: getTitle(session), cwd: session.cwd }]);
+        setActiveTabId(session.id);
+      }
+    },
+    [liveTabs, getTitle]
+  );
+
+  const handleCloseTab = useCallback(
+    (sessionId: string) => {
+      window.electronAPI.pty.kill(sessionId);
+      setLiveTabs((prev) => {
+        const next = prev.filter((t) => t.sessionId !== sessionId);
+        if (activeTabId === sessionId) {
+          setActiveTabId(next.length > 0 ? next[next.length - 1].sessionId : null);
+        }
+        return next;
+      });
+    },
+    [activeTabId]
+  );
+
+  const handleDelete = useCallback(
+    async (session: SessionInfo) => {
+      if (liveSessionIds.has(session.id)) handleCloseTab(session.id);
+      await deleteSession(session.filePath);
+    },
+    [deleteSession, liveSessionIds, handleCloseTab]
+  );
+
+  const handleNewSessionConfirm = useCallback(
+    async (cwd: string, title: string) => {
+      setShowNewSessionModal(false);
+      const result = await window.electronAPI.pty.spawnNew(cwd);
+      if (result.success && result.sessionId) {
+        const tabTitle = title || 'New Session';
+        setLiveTabs((prev) => [...prev, { sessionId: result.sessionId!, title: tabTitle, cwd: cwd || '~' }]);
+        setActiveTabId(result.sessionId);
+        if (title) updateMeta(result.sessionId, { customTitle: title });
+      }
+    },
+    [updateMeta]
+  );
+
+  const handleRename = useCallback(
+    (sessionId: string, newTitle: string) => {
+      updateMeta(sessionId, { customTitle: newTitle });
+      setLiveTabs((prev) => prev.map((t) => (t.sessionId === sessionId ? { ...t, title: newTitle } : t)));
+    },
+    [updateMeta]
+  );
+
+  const handleTogglePin = useCallback(
+    (sessionId: string) => updateMeta(sessionId, { pinned: !sessionMeta[sessionId]?.pinned }),
+    [sessionMeta, updateMeta]
+  );
+
+  const handleToggleArchive = useCallback(
+    (sessionId: string) => updateMeta(sessionId, { archived: !sessionMeta[sessionId]?.archived }),
+    [sessionMeta, updateMeta]
+  );
+
+  const handleContextMenu = useCallback(
+    async (session: SessionInfo) => {
+      const meta = sessionMeta[session.id] || {};
+      const action = await window.electronAPI.app.showContextMenu(session.id, {
+        pinned: meta.pinned,
+        archived: meta.archived,
+      });
+      switch (action) {
+        case 'resume': handleSelect(session); break;
+        case 'rename': {
+          const newName = window.prompt('Rename session:', getTitle(session));
+          if (newName?.trim()) handleRename(session.id, newName.trim());
+          break;
+        }
+        case 'togglePin': handleTogglePin(session.id); break;
+        case 'toggleArchive': handleToggleArchive(session.id); break;
+        case 'copyId':
+          try { await navigator.clipboard.writeText(session.id); }
+          catch { (window as any).electronAPI?.clipboard?.writeText?.(session.id); }
+          break;
+        case 'delete': handleDelete(session); break;
+      }
+    },
+    [sessionMeta, handleSelect, handleRename, handleTogglePin, handleToggleArchive, handleDelete, getTitle]
+  );
+
+  // --- Sidebar resize ---
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const newWidth = Math.max(200, Math.min(600, startWidth + (ev.clientX - startX)));
+      setSidebarWidth(newWidth);
+    };
+    const onUp = () => {
+      resizingRef.current = false;
+      window.electronAPI.store.set('settings.sidebarWidth', sidebarWidth);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [sidebarWidth]);
+
+  const tabInfos: TabInfo[] = liveTabs.map((tab) => ({
+    sessionId: tab.sessionId,
+    title: sessionMeta[tab.sessionId]?.customTitle || tab.title,
+    isLive: true,
+    isWaiting: false,
+  }));
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-900">
+      {/* Sidebar */}
+      <Sidebar
+        sessions={sessions}
+        selectedId={activeTabId}
+        liveSessions={liveSessionIds}
+        sessionMeta={sessionMeta}
+        width={sidebarWidth}
+        onSelect={handleSelect}
+        onDelete={handleDelete}
+        onNewSession={() => setShowNewSessionModal(true)}
+        onRename={handleRename}
+        onTogglePin={handleTogglePin}
+        onToggleArchive={handleToggleArchive}
+        onContextMenu={handleContextMenu}
+        onOpenSettings={() => setShowSettings(true)}
+        loading={loading}
+        searchRef={searchRef}
+      />
+
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors flex-shrink-0"
+      />
+
+      {/* Main panel */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Title bar */}
+        <div className="drag-region h-10 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-900 flex-shrink-0">
+          <div className="no-drag flex items-center gap-3">
+            {activeTabId && (
+              <>
+                <h1 className="text-sm font-medium text-slate-200">
+                  {sessionMeta[activeTabId]?.customTitle ||
+                    liveTabs.find((t) => t.sessionId === activeTabId)?.title || ''}
+                </h1>
+                <span className="text-xs text-slate-600 font-mono">
+                  {liveTabs.find((t) => t.sessionId === activeTabId)?.cwd || ''}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="no-drag flex items-center gap-2">
+            <button
+              onClick={refresh}
+              className="text-xs px-2 py-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors"
+              title="Refresh session list"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* Tab bar */}
+        {liveTabs.length > 0 && (
+          <TabBar tabs={tabInfos} activeId={activeTabId} onSelect={setActiveTabId} onClose={handleCloseTab} />
+        )}
+
+        {/* Session views */}
+        <div className="flex-1 overflow-hidden relative">
+          {liveTabs.length === 0 ? (
+            <EmptyState
+              hasSessions={sessions.length > 0}
+              onNewSession={() => setShowNewSessionModal(true)}
+            />
+          ) : (
+            liveTabs.map((tab) => (
+              <div
+                key={tab.sessionId}
+                className="absolute inset-0"
+                style={{ display: tab.sessionId === activeTabId ? 'block' : 'none' }}
+              >
+                <SessionView sessionId={tab.sessionId} cwd={tab.cwd} active={tab.sessionId === activeTabId} />
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Modals */}
+      <NewSessionModal
+        isOpen={showNewSessionModal}
+        onClose={() => setShowNewSessionModal(false)}
+        onConfirm={handleNewSessionConfirm}
+      />
+      <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <AboutDialog isOpen={showAbout} onClose={() => setShowAbout(false)} />
+    </div>
+  );
+}
