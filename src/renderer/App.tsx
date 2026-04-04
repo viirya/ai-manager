@@ -25,6 +25,7 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [sessionMeta, setSessionMeta] = useState<Record<string, SessionMeta>>({});
   const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [showSidebar, setShowSidebar] = useState(true);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const resizingRef = useRef(false);
 
@@ -48,7 +49,11 @@ export default function App() {
     unsubs.push(window.electronAPI.on('menu:switchTab', (index: number) => {
       if (liveTabs[index]) setActiveTabId(liveTabs[index].sessionId);
     }));
-    unsubs.push(window.electronAPI.on('menu:focusSearch', () => searchRef.current?.focus()));
+    unsubs.push(window.electronAPI.on('menu:focusSearch', () => {
+      setShowSidebar(true);
+      setTimeout(() => searchRef.current?.focus(), 100);
+    }));
+    unsubs.push(window.electronAPI.on('menu:toggleSidebar', () => setShowSidebar(s => !s)));
     unsubs.push(window.electronAPI.on('menu:settings', () => setShowSettings(true)));
     unsubs.push(window.electronAPI.on('menu:about', () => setShowAbout(true)));
     unsubs.push(window.electronAPI.on('menu:toggleRaw', () => {
@@ -206,35 +211,49 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-900">
       {/* Sidebar */}
-      <Sidebar
-        sessions={sessions}
-        selectedId={activeTabId}
-        liveSessions={liveSessionIds}
-        sessionMeta={sessionMeta}
-        width={sidebarWidth}
-        onSelect={handleSelect}
-        onDelete={handleDelete}
-        onNewSession={() => setShowNewSessionModal(true)}
-        onRename={handleRename}
-        onTogglePin={handleTogglePin}
-        onToggleArchive={handleToggleArchive}
-        onContextMenu={handleContextMenu}
-        onOpenSettings={() => setShowSettings(true)}
-        loading={loading}
-        searchRef={searchRef}
-      />
+      {showSidebar && (
+        <>
+          <Sidebar
+            sessions={sessions}
+            selectedId={activeTabId}
+            liveSessions={liveSessionIds}
+            sessionMeta={sessionMeta}
+            width={sidebarWidth}
+            onSelect={handleSelect}
+            onDelete={handleDelete}
+            onNewSession={() => setShowNewSessionModal(true)}
+            onRename={handleRename}
+            onTogglePin={handleTogglePin}
+            onToggleArchive={handleToggleArchive}
+            onContextMenu={handleContextMenu}
+            onOpenSettings={() => setShowSettings(true)}
+            loading={loading}
+            searchRef={searchRef}
+          />
 
-      {/* Resize handle */}
-      <div
-        onMouseDown={handleResizeStart}
-        className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors flex-shrink-0"
-      />
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors flex-shrink-0"
+          />
+        </>
+      )}
 
       {/* Main panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Title bar */}
         <div className="drag-region h-10 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-900 flex-shrink-0">
           <div className="no-drag flex items-center gap-3">
+            <button
+              onClick={() => setShowSidebar(s => !s)}
+              className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+              title={showSidebar ? 'Hide sidebar (Cmd+B)' : 'Show sidebar (Cmd+B)'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            </button>
             {activeTabId && (
               <>
                 <h1 className="text-sm font-medium text-slate-200">

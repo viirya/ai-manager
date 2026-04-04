@@ -196,6 +196,11 @@ function buildAppMenu() {
       label: 'View',
       submenu: [
         {
+          label: 'Toggle Sidebar',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => mainWindow?.webContents.send('menu:toggleSidebar'),
+        },
+        {
           label: 'Toggle Raw Terminal',
           accelerator: 'CmdOrCtrl+Shift+R',
           click: () => mainWindow?.webContents.send('menu:toggleRaw'),
