@@ -60,12 +60,22 @@ npm install
 To run in development mode (hot-reloading renderer + Electron):
 
 ```bash
-# Terminal 1: Start the Vite dev server
+# Terminal 1: Start the Vite dev server (fixed to port 5173)
 npx vite
 
 # Terminal 2: Compile the main process and launch Electron
 npx tsc -p tsconfig.main.json
 ELECTRON_RUN_AS_NODE= npx electron .
+```
+
+To use a different port:
+
+```bash
+# Terminal 1
+npx vite --port 3000
+
+# Terminal 2
+VITE_PORT=3000 ELECTRON_RUN_AS_NODE= npx electron .
 ```
 
 To build for production:
@@ -76,6 +86,8 @@ ELECTRON_RUN_AS_NODE= npx electron .
 ```
 
 > **Note:** If you use Claude Code's VS Code extension, your shell likely has `ELECTRON_RUN_AS_NODE=1` set. This breaks Electron's ability to load its own modules. You must unset it before launching: prefix the electron command with `ELECTRON_RUN_AS_NODE=` (set to empty). The dev scripts in `package.json` handle this automatically.
+
+> **Note:** Vite is configured with `strictPort: true` — if port 5173 is already occupied, it will fail with an error instead of silently switching to another port. Kill the old process first: `kill $(lsof -ti:5173)`
 
 ## Keyboard Shortcuts
 
