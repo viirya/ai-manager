@@ -13,6 +13,7 @@ interface LiveTab {
   sessionId: string;
   title: string;
   cwd: string;
+  alreadySpawned?: boolean; // PTY was spawned before tab was created (new session flow)
 }
 
 export default function App() {
@@ -114,9 +115,16 @@ export default function App() {
       const result = await window.electronAPI.pty.spawnNew(cwd);
       if (result.success && result.sessionId) {
         const tabTitle = title || 'New Session';
-        setLiveTabs((prev) => [...prev, { sessionId: result.sessionId!, title: tabTitle, cwd: cwd || '~' }]);
+        setLiveTabs((prev) => [...prev, {
+          sessionId: result.sessionId!,
+          title: tabTitle,
+          cwd: cwd || '~',
+          alreadySpawned: true,
+        }]);
         setActiveTabId(result.sessionId);
         if (title) updateMeta(result.sessionId, { customTitle: title });
+      } else {
+        alert(`Failed to create session: ${result.error || 'Unknown error'}`);
       }
     },
     [updateMeta]
@@ -263,15 +271,26 @@ export default function App() {
               onNewSession={() => setShowNewSessionModal(true)}
             />
           ) : (
-            liveTabs.map((tab) => (
+            liveTabs.map((tab) => {
+              const isActive = tab.sessionId === activeTabId;
+              return (
               <div
                 key={tab.sessionId}
                 className="absolute inset-0"
-                style={{ display: tab.sessionId === activeTabId ? 'block' : 'none' }}
+                style={{
+                  visibility: isActive ? 'visible' : 'hidden',
+                  zIndex: isActive ? 1 : 0,
+                }}
               >
-                <SessionView sessionId={tab.sessionId} cwd={tab.cwd} active={tab.sessionId === activeTabId} />
+                <SessionView
+                  sessionId={tab.sessionId}
+                  cwd={tab.cwd}
+                  active={tab.sessionId === activeTabId}
+                  alreadySpawned={tab.alreadySpawned}
+                />
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

@@ -1,6 +1,5 @@
 import { BrowserWindow } from 'electron';
 import * as os from 'os';
-import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
 
@@ -20,7 +19,6 @@ let claudeBinaryPath: string | null = null;
 export function detectClaudeBinary(): string {
   if (claudeBinaryPath) return claudeBinaryPath;
   try {
-    // Use login shell to get full PATH
     const shell = process.env.SHELL || '/bin/zsh';
     claudeBinaryPath = execSync(`${shell} -ilc "which claude"`, {
       encoding: 'utf-8',
@@ -34,69 +32,88 @@ export function detectClaudeBinary(): string {
   }
 }
 
+// Build a clean env for PTY spawning:
+// - Start from process.env
+// - Remove ELECTRON_RUN_AS_NODE (breaks claude)
+// - Ensure PATH includes the directory containing claude and node
+function buildPtyEnv(): Record<string, string> {
+  const env: Record<string, string> = { ...process.env } as Record<string, string>;
+  delete env['ELECTRON_RUN_AS_NODE'];
+
+  // Ensure the claude binary's directory and node's directory are in PATH
+  try {
+    const shell = process.env.SHELL || '/bin/zsh';
+    const shellPath = execSync(`${shell} -ilc "echo \\$PATH"`, {
+      encoding: 'utf-8',
+      timeout: 5000,
+    }).trim();
+    if (shellPath) {
+      env['PATH'] = shellPath;
+    }
+  } catch {
+    // Fall back to process.env PATH
+  }
+
+  return env;
+}
+
+// Spawn a PTY running claude with given args
+function spawnClaudePty(
+  args: string[],
+  cwd: string,
+  window: BrowserWindow,
+  sessionId: string,
+): any {
+  const claudePath = detectClaudeBinary();
+  const workDir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
+  const env = buildPtyEnv();
+
+  // Spawn the user's login shell, then exec claude inside it.
+  // This ensures nvm/pyenv/etc. are initialized and "node" is available.
+  const shell = process.env.SHELL || '/bin/zsh';
+  const claudeCmd = [claudePath, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+
+  const ptyProcess = pty.spawn(shell, ['-il', '-c', claudeCmd], {
+    name: 'xterm-256color',
+    cols: 120,
+    rows: 30,
+    cwd: workDir,
+    env,
+  });
+
+  const instance: PtyInstance = {
+    process: ptyProcess,
+    sessionId,
+    cwd: workDir,
+  };
+
+  livePtys.set(sessionId, instance);
+
+  ptyProcess.onData((data: string) => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(`pty:data:${sessionId}`, data);
+    }
+  });
+
+  ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+    livePtys.delete(sessionId);
+    if (!window.isDestroyed()) {
+      window.webContents.send(`pty:exit:${sessionId}`, exitCode);
+    }
+  });
+
+  return ptyProcess;
+}
+
 export function spawnSession(
   sessionId: string,
   cwd: string,
   window: BrowserWindow
 ): { success: boolean; error?: string } {
-  // Kill existing PTY for this session if any
   killSession(sessionId);
 
   try {
-    const claudePath = detectClaudeBinary();
-    const workDir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
-
-    // Get shell environment for proper PATH
-    let shellEnv: Record<string, string> = { ...process.env } as Record<string, string>;
-    try {
-      const shell = process.env.SHELL || '/bin/zsh';
-      const envStr = execSync(`${shell} -ilc "env"`, {
-        encoding: 'utf-8',
-        timeout: 5000,
-      });
-      for (const line of envStr.split('\n')) {
-        const idx = line.indexOf('=');
-        if (idx > 0) {
-          shellEnv[line.slice(0, idx)] = line.slice(idx + 1);
-        }
-      }
-    } catch {
-      // Fall back to process.env
-    }
-
-    // Critical: unset ELECTRON_RUN_AS_NODE so claude isn't broken
-    delete shellEnv['ELECTRON_RUN_AS_NODE'];
-
-    const ptyProcess = pty.spawn(claudePath, ['--resume', sessionId], {
-      name: 'xterm-256color',
-      cols: 120,
-      rows: 30,
-      cwd: workDir,
-      env: shellEnv,
-    });
-
-    const instance: PtyInstance = {
-      process: ptyProcess,
-      sessionId,
-      cwd: workDir,
-    };
-
-    livePtys.set(sessionId, instance);
-
-    // Bridge PTY output to renderer
-    ptyProcess.onData((data: string) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send(`pty:data:${sessionId}`, data);
-      }
-    });
-
-    ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
-      livePtys.delete(sessionId);
-      if (!window.isDestroyed()) {
-        window.webContents.send(`pty:exit:${sessionId}`, exitCode);
-      }
-    });
-
+    spawnClaudePty(['--resume', sessionId], cwd, window, sessionId);
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message || String(err) };
@@ -107,61 +124,10 @@ export function spawnNewSession(
   cwd: string,
   window: BrowserWindow
 ): { success: boolean; sessionId?: string; error?: string } {
-  // For new sessions, we generate a temp ID for tracking.
-  // The real session ID will come from claude's output.
   const tempId = `new-${Date.now()}`;
 
   try {
-    const claudePath = detectClaudeBinary();
-    const workDir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
-
-    let shellEnv: Record<string, string> = { ...process.env } as Record<string, string>;
-    try {
-      const shell = process.env.SHELL || '/bin/zsh';
-      const envStr = execSync(`${shell} -ilc "env"`, {
-        encoding: 'utf-8',
-        timeout: 5000,
-      });
-      for (const line of envStr.split('\n')) {
-        const idx = line.indexOf('=');
-        if (idx > 0) {
-          shellEnv[line.slice(0, idx)] = line.slice(idx + 1);
-        }
-      }
-    } catch {
-      // Fall back
-    }
-    delete shellEnv['ELECTRON_RUN_AS_NODE'];
-
-    const ptyProcess = pty.spawn(claudePath, [], {
-      name: 'xterm-256color',
-      cols: 120,
-      rows: 30,
-      cwd: workDir,
-      env: shellEnv,
-    });
-
-    const instance: PtyInstance = {
-      process: ptyProcess,
-      sessionId: tempId,
-      cwd: workDir,
-    };
-
-    livePtys.set(tempId, instance);
-
-    ptyProcess.onData((data: string) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send(`pty:data:${tempId}`, data);
-      }
-    });
-
-    ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
-      livePtys.delete(tempId);
-      if (!window.isDestroyed()) {
-        window.webContents.send(`pty:exit:${tempId}`, exitCode);
-      }
-    });
-
+    spawnClaudePty([], cwd, window, tempId);
     return { success: true, sessionId: tempId };
   } catch (err: any) {
     return { success: false, error: err.message || String(err) };

@@ -9,7 +9,7 @@
     "dev:main": "tsc -p tsconfig.main.json && ELECTRON_RUN_AS_NODE= electron .",
     "build": "tsc -p tsconfig.main.json && vite build",
     "start": "ELECTRON_RUN_AS_NODE= electron .",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

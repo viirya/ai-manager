@@ -5,10 +5,11 @@ import '@xterm/xterm/css/xterm.css';
 
 interface RawTerminalProps {
   sessionId: string;
+  active?: boolean;
   onResize?: (cols: number, rows: number) => void;
 }
 
-export default function RawTerminal({ sessionId, onResize }: RawTerminalProps) {
+export default function RawTerminal({ sessionId, active, onResize }: RawTerminalProps) {
   const termRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -96,6 +97,32 @@ export default function RawTerminal({ sessionId, onResize }: RawTerminalProps) {
       terminal.dispose();
     };
   }, [sessionId, onResize]);
+
+  // Refit when this tab becomes active (container goes from display:none to visible)
+  useEffect(() => {
+    if (!active || !fitAddonRef.current || !terminalRef.current) return;
+
+    const doFit = () => {
+      if (fitAddonRef.current && terminalRef.current) {
+        fitAddonRef.current.fit();
+        if (onResize) {
+          onResize(terminalRef.current.cols, terminalRef.current.rows);
+        }
+      }
+    };
+
+    // display:none → block needs time for browser to complete layout.
+    // Fire fit at multiple timings to be safe.
+    const t1 = setTimeout(doFit, 0);
+    const t2 = setTimeout(doFit, 50);
+    const t3 = setTimeout(doFit, 150);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [active, onResize]);
 
   return (
     <div

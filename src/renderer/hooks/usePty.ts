@@ -74,9 +74,10 @@ interface UsePtyOptions {
   sessionId: string;
   cwd: string;
   autoSpawn?: boolean;
+  skipSpawn?: boolean; // If true, PTY already exists — just subscribe, don't spawn
 }
 
-export function usePty({ sessionId, cwd, autoSpawn = true }: UsePtyOptions) {
+export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false }: UsePtyOptions) {
   const [rawOutput, setRawOutput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLive, setIsLive] = useState(false);
@@ -189,7 +190,53 @@ export function usePty({ sessionId, cwd, autoSpawn = true }: UsePtyOptions) {
     setMessages(msgs);
   }, []);
 
-  // Spawn PTY
+  // Subscribe to PTY data/exit events (shared between spawn and subscribeOnly)
+  const subscribe = useCallback(() => {
+    // Unsubscribe previous if any
+    if (unsubDataRef.current) unsubDataRef.current();
+    if (unsubExitRef.current) unsubExitRef.current();
+
+    unsubDataRef.current = window.electronAPI.pty.onData(sessionId, (data: string) => {
+      // Buffer incomplete ANSI sequences
+      let buffered = rawBufferRef.current + data;
+
+      const lastEsc = buffered.lastIndexOf('\x1B');
+      if (lastEsc >= 0 && lastEsc > buffered.length - 10) {
+        const tail = buffered.slice(lastEsc);
+        const isComplete =
+          /^\x1B\[[0-9;]*[a-zA-Z]/.test(tail) ||
+          /^\x1B\].*?(\x07|\x1B\\)/.test(tail) ||
+          /^\x1B[a-zA-Z]/.test(tail);
+        if (!isComplete && tail.length < 20) {
+          rawBufferRef.current = tail;
+          buffered = buffered.slice(0, lastEsc);
+        } else {
+          rawBufferRef.current = '';
+        }
+      } else {
+        rawBufferRef.current = '';
+      }
+
+      rawOutputRef.current += buffered;
+      setRawOutput(rawOutputRef.current);
+
+      setIsWaiting(false);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        setIsWaiting(true);
+        parseOutput(rawOutputRef.current);
+      }, 500);
+    });
+
+    unsubExitRef.current = window.electronAPI.pty.onExit(sessionId, (code: number) => {
+      setIsLive(false);
+      setExitCode(code);
+      setIsWaiting(false);
+      parseOutput(rawOutputRef.current);
+    });
+  }, [sessionId, parseOutput]);
+
+  // Spawn PTY then subscribe
   const spawn = useCallback(async () => {
     setError(null);
     setExitCode(null);
@@ -207,58 +254,18 @@ export function usePty({ sessionId, cwd, autoSpawn = true }: UsePtyOptions) {
 
     setIsLive(true);
     setIsWaiting(false);
-
-    // Subscribe to PTY data
-    unsubDataRef.current = window.electronAPI.pty.onData(sessionId, (data: string) => {
-      // Buffer incomplete ANSI sequences
-      let buffered = rawBufferRef.current + data;
-
-      // Check if the last chunk ends mid-escape sequence
-      const lastEsc = buffered.lastIndexOf('\x1B');
-      if (lastEsc >= 0 && lastEsc > buffered.length - 10) {
-        // Possible incomplete sequence at end — check if it looks complete
-        const tail = buffered.slice(lastEsc);
-        const isComplete =
-          /^\x1B\[[0-9;]*[a-zA-Z]/.test(tail) ||
-          /^\x1B\].*?(\x07|\x1B\\)/.test(tail) ||
-          /^\x1B[a-zA-Z]/.test(tail);
-        if (!isComplete && tail.length < 20) {
-          // Hold the incomplete sequence for next chunk
-          rawBufferRef.current = tail;
-          buffered = buffered.slice(0, lastEsc);
-        } else {
-          rawBufferRef.current = '';
-        }
-      } else {
-        rawBufferRef.current = '';
-      }
-
-      rawOutputRef.current += buffered;
-      setRawOutput(rawOutputRef.current);
-
-      // Reset idle timer
-      setIsWaiting(false);
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => {
-        setIsWaiting(true);
-        parseOutput(rawOutputRef.current);
-      }, 500);
-    });
-
-    // Subscribe to PTY exit
-    unsubExitRef.current = window.electronAPI.pty.onExit(sessionId, (code: number) => {
-      setIsLive(false);
-      setExitCode(code);
-      setIsWaiting(false);
-      parseOutput(rawOutputRef.current);
-    });
-
+    subscribe();
     return true;
-  }, [sessionId, cwd, parseOutput]);
+  }, [sessionId, cwd, subscribe]);
 
-  // Auto-spawn on mount
+  // On mount: spawn or just subscribe if PTY already exists
   useEffect(() => {
-    if (autoSpawn) {
+    if (skipSpawn) {
+      // PTY already spawned externally (e.g. new session) — just subscribe
+      setIsLive(true);
+      setIsWaiting(false);
+      subscribe();
+    } else if (autoSpawn) {
       spawn();
     }
 
@@ -267,7 +274,7 @@ export function usePty({ sessionId, cwd, autoSpawn = true }: UsePtyOptions) {
       if (unsubExitRef.current) unsubExitRef.current();
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
-  }, [autoSpawn, spawn]);
+  }, [autoSpawn, skipSpawn, spawn, subscribe]);
 
   // Send message to PTY
   const sendMessage = useCallback(
