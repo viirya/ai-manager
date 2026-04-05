@@ -2,8 +2,6 @@
 
 A desktop session manager for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), built with Electron + React. Think iTerm2 for Claude Code — discover, resume, and juggle multiple Claude Code sessions from a single app with a proper UI.
 
-![Screenshot](docs/screenshot.png)
-
 ## Overview
 
 Claude Code's built-in session management is minimal: you get `claude --resume <id>` in a terminal, and that's about it. If you work across multiple projects or revisit past conversations frequently, keeping track of sessions becomes painful fast.
