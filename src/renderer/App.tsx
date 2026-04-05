@@ -6,6 +6,8 @@ import EmptyState from './components/EmptyState';
 import NewSessionModal from './components/NewSessionModal';
 import SettingsPanel from './components/SettingsPanel';
 import AboutDialog from './components/AboutDialog';
+import DialogueSetupModal from './components/DialogueSetupModal';
+import DialogueView from './components/DialogueView';
 import { useSessions } from './hooks/useSessions';
 import type { SessionInfo, SessionMeta } from '../shared/types';
 
@@ -13,7 +15,8 @@ interface LiveTab {
   sessionId: string;
   title: string;
   cwd: string;
-  alreadySpawned?: boolean; // PTY was spawned before tab was created (new session flow)
+  alreadySpawned?: boolean;
+  type?: 'session' | 'dialogue'; // default: 'session'
 }
 
 export default function App() {
@@ -23,9 +26,11 @@ export default function App() {
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showDialogueSetup, setShowDialogueSetup] = useState(false);
   const [sessionMeta, setSessionMeta] = useState<Record<string, SessionMeta>>({});
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [dialogueSessions, setDialogueSessions] = useState<Set<string>>(new Set()); // sessions in active dialogues
   const searchRef = useRef<HTMLInputElement | null>(null);
   const resizingRef = useRef(false);
 
@@ -37,6 +42,26 @@ export default function App() {
     window.electronAPI.store.get('settings.sidebarWidth').then((val) => {
       if (typeof val === 'number' && val >= 200) setSidebarWidth(val);
     });
+  }, []);
+
+  // Listen for dialogue updates to track which sessions are in dialogues
+  useEffect(() => {
+    const unsub = window.electronAPI.dialogue.onUpdate((snapshot: any) => {
+      if (snapshot.status === 'stopped') {
+        setDialogueSessions((prev) => {
+          const next = new Set(prev);
+          for (const sid of snapshot.sessionIds) next.delete(sid);
+          return next;
+        });
+      } else {
+        setDialogueSessions((prev) => {
+          const next = new Set(prev);
+          for (const sid of snapshot.sessionIds) next.add(sid);
+          return next;
+        });
+      }
+    });
+    return unsub;
   }, []);
 
   // Listen for menu events from main process
@@ -55,15 +80,13 @@ export default function App() {
     }));
     unsubs.push(window.electronAPI.on('menu:toggleSidebar', () => {
       setShowSidebar(s => {
-        if (!s) refresh(); // Refresh session list when sidebar becomes visible
+        if (!s) refresh();
         return !s;
       });
     }));
     unsubs.push(window.electronAPI.on('menu:settings', () => setShowSettings(true)));
     unsubs.push(window.electronAPI.on('menu:about', () => setShowAbout(true)));
     unsubs.push(window.electronAPI.on('menu:toggleRaw', () => {
-      // This would need to be forwarded to the active SessionView.
-      // For simplicity, we'll toggle via a global event.
       window.dispatchEvent(new CustomEvent('toggle-raw-terminal'));
     }));
     return () => unsubs.forEach((u) => u());
@@ -77,7 +100,7 @@ export default function App() {
     });
   }, []);
 
-  const liveSessionIds = new Set(liveTabs.map((t) => t.sessionId));
+  const liveSessionIds = new Set(liveTabs.filter(t => t.type !== 'dialogue').map((t) => t.sessionId));
 
   const getTitle = useCallback(
     (session: SessionInfo) => sessionMeta[session.id]?.customTitle || session.title,
@@ -99,7 +122,13 @@ export default function App() {
 
   const handleCloseTab = useCallback(
     (sessionId: string) => {
-      window.electronAPI.pty.kill(sessionId);
+      const tab = liveTabs.find(t => t.sessionId === sessionId);
+      if (tab?.type === 'dialogue') {
+        // Stop dialogue if running
+        window.electronAPI.dialogue.stop(sessionId);
+      } else {
+        window.electronAPI.pty.kill(sessionId);
+      }
       setLiveTabs((prev) => {
         const next = prev.filter((t) => t.sessionId !== sessionId);
         if (activeTabId === sessionId) {
@@ -108,19 +137,17 @@ export default function App() {
         return next;
       });
     },
-    [activeTabId]
+    [activeTabId, liveTabs]
   );
 
   const handleDelete = useCallback(
     async (session: SessionInfo) => {
-      // Save sidebar list scroll position before deletion triggers re-render
       const scrollEl = document.querySelector('[data-sidebar-list]')?.firstElementChild as HTMLElement | null;
       const scrollTop = scrollEl?.scrollTop ?? 0;
 
       if (liveSessionIds.has(session.id)) handleCloseTab(session.id);
       await deleteSession(session.filePath);
 
-      // Restore after React re-renders
       requestAnimationFrame(() => {
         const el = document.querySelector('[data-sidebar-list]')?.firstElementChild as HTMLElement | null;
         if (el) el.scrollTop = scrollTop;
@@ -148,6 +175,28 @@ export default function App() {
       }
     },
     [updateMeta]
+  );
+
+  // --- Dialogue ---
+  const handleDialogueConfirm = useCallback(
+    async (config: any) => {
+      setShowDialogueSetup(false);
+      const result = await window.electronAPI.dialogue.start(config);
+      if (result.success && result.dialogueId) {
+        const labels = config.sessionLabels as Record<string, string>;
+        const names = config.sessionIds.map((sid: string) => labels[sid] || sid.slice(0, 8));
+        setLiveTabs((prev) => [...prev, {
+          sessionId: result.dialogueId!,
+          title: names.join(' ↔ '),
+          cwd: '',
+          type: 'dialogue',
+        }]);
+        setActiveTabId(result.dialogueId);
+      } else {
+        alert(`Failed to start dialogue: ${result.error || 'Unknown error'}`);
+      }
+    },
+    []
   );
 
   const handleRename = useCallback(
@@ -216,12 +265,21 @@ export default function App() {
     document.addEventListener('mouseup', onUp);
   }, [sidebarWidth]);
 
+  // Build tab infos — dialogue tabs get a special icon
   const tabInfos: TabInfo[] = liveTabs.map((tab) => ({
     sessionId: tab.sessionId,
-    title: sessionMeta[tab.sessionId]?.customTitle || tab.title,
+    title: (tab.type === 'dialogue' ? '↔ ' : '') + (sessionMeta[tab.sessionId]?.customTitle || tab.title),
     isLive: true,
     isWaiting: false,
   }));
+
+  // Live sessions list for the dialogue setup modal
+  const liveSessionList = liveTabs
+    .filter(t => t.type !== 'dialogue')
+    .map(t => ({
+      sessionId: t.sessionId,
+      title: sessionMeta[t.sessionId]?.customTitle || t.title,
+    }));
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-900">
@@ -233,6 +291,7 @@ export default function App() {
             selectedId={activeTabId}
             liveSessions={liveSessionIds}
             sessionMeta={sessionMeta}
+            dialogueSessions={dialogueSessions}
             width={sidebarWidth}
             onSelect={handleSelect}
             onDelete={handleDelete}
@@ -245,8 +304,6 @@ export default function App() {
             loading={loading}
             searchRef={searchRef}
           />
-
-          {/* Resize handle */}
           <div
             onMouseDown={handleResizeStart}
             className="w-1 cursor-col-resize hover:bg-indigo-500/30 active:bg-indigo-500/50 transition-colors flex-shrink-0"
@@ -282,6 +339,16 @@ export default function App() {
             )}
           </div>
           <div className="no-drag flex items-center gap-2">
+            {/* Start Dialogue button */}
+            {liveSessionList.length >= 2 && (
+              <button
+                onClick={() => setShowDialogueSetup(true)}
+                className="text-xs px-2 py-1 text-indigo-400 hover:text-indigo-300 hover:bg-slate-800 rounded transition-colors"
+                title="Start a dialogue between sessions"
+              >
+                ↔ Dialogue
+              </button>
+            )}
             <button
               onClick={refresh}
               className="text-xs px-2 py-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors"
@@ -297,7 +364,7 @@ export default function App() {
           <TabBar tabs={tabInfos} activeId={activeTabId} onSelect={setActiveTabId} onClose={handleCloseTab} />
         )}
 
-        {/* Session views */}
+        {/* Session/Dialogue views */}
         <div className="flex-1 overflow-hidden relative">
           {liveTabs.length === 0 ? (
             <EmptyState
@@ -307,22 +374,36 @@ export default function App() {
           ) : (
             liveTabs.map((tab) => {
               const isActive = tab.sessionId === activeTabId;
+              if (tab.type === 'dialogue') {
+                return (
+                  <div
+                    key={tab.sessionId}
+                    className="absolute inset-0"
+                    style={{
+                      visibility: isActive ? 'visible' : 'hidden',
+                      zIndex: isActive ? 1 : 0,
+                    }}
+                  >
+                    <DialogueView dialogueId={tab.sessionId} active={isActive} />
+                  </div>
+                );
+              }
               return (
-              <div
-                key={tab.sessionId}
-                className="absolute inset-0"
-                style={{
-                  visibility: isActive ? 'visible' : 'hidden',
-                  zIndex: isActive ? 1 : 0,
-                }}
-              >
-                <SessionView
-                  sessionId={tab.sessionId}
-                  cwd={tab.cwd}
-                  active={tab.sessionId === activeTabId}
-                  alreadySpawned={tab.alreadySpawned}
-                />
-              </div>
+                <div
+                  key={tab.sessionId}
+                  className="absolute inset-0"
+                  style={{
+                    visibility: isActive ? 'visible' : 'hidden',
+                    zIndex: isActive ? 1 : 0,
+                  }}
+                >
+                  <SessionView
+                    sessionId={tab.sessionId}
+                    cwd={tab.cwd}
+                    active={isActive}
+                    alreadySpawned={tab.alreadySpawned}
+                  />
+                </div>
               );
             })
           )}
@@ -334,6 +415,12 @@ export default function App() {
         isOpen={showNewSessionModal}
         onClose={() => setShowNewSessionModal(false)}
         onConfirm={handleNewSessionConfirm}
+      />
+      <DialogueSetupModal
+        isOpen={showDialogueSetup}
+        liveSessions={liveSessionList}
+        onClose={() => setShowDialogueSetup(false)}
+        onConfirm={handleDialogueConfirm}
       />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <AboutDialog isOpen={showAbout} onClose={() => setShowAbout(false)} />

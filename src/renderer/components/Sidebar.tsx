@@ -57,6 +57,7 @@ export interface SidebarProps {
   selectedId: string | null;
   liveSessions: Set<string>;
   sessionMeta: Record<string, SessionMeta>;
+  dialogueSessions: Set<string>;
   width: number;
   onSelect: (session: SessionInfo) => void;
   onDelete: (session: SessionInfo) => void;
@@ -75,6 +76,7 @@ export default function Sidebar({
   selectedId,
   liveSessions,
   sessionMeta,
+  dialogueSessions,
   width,
   onSelect,
   onDelete,
@@ -159,6 +161,7 @@ export default function Sidebar({
       onDelete: (s: SessionInfo) => void;
       setRenamingId: (id: string | null) => void;
       setConfirmDelete: (id: string | null) => void;
+      dialogueSessions: Set<string>;
     };
   }) {
     const session = data.filtered[index];
@@ -180,7 +183,8 @@ export default function Sidebar({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               {meta.pinned && <span className="flex-shrink-0 text-xs text-amber-500">*</span>}
-              {isLive && <span className="flex-shrink-0 w-2 h-2 rounded-full bg-green-400" />}
+              {isLive && <span className="flex-shrink-0 w-2 h-2 rounded-full bg-green-400" title="Live" />}
+              {data.dialogueSessions.has(session.id) && <span className="flex-shrink-0 text-xs text-indigo-400" title="In dialogue">↔</span>}
               {data.renamingId === session.id ? (
                 <InlineRename
                   initialValue={title}
@@ -239,7 +243,8 @@ export default function Sidebar({
     onDelete,
     setRenamingId,
     setConfirmDelete,
-  }), [filtered, liveSessions, sessionMeta, selectedId, renamingId, confirmDelete, getTitle, onSelect, onContextMenu, onRename, onDelete]);
+    dialogueSessions,
+  }), [filtered, liveSessions, sessionMeta, selectedId, renamingId, confirmDelete, getTitle, onSelect, onContextMenu, onRename, onDelete, dialogueSessions]);
 
   return (
     <div

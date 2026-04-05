@@ -70,9 +70,26 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
       window.electronAPI.pty.write(sessionId, data);
     });
 
-    // Subscribe to PTY output
+    // Track if user has scrolled up
+    let userScrolledUp = false;
+    terminal.onScroll(() => {
+      const viewport = termRef.current?.querySelector('.xterm-viewport');
+      if (viewport) {
+        const distFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        userScrolledUp = distFromBottom > 50;
+      }
+    });
+
+    // Subscribe to PTY output — preserve scroll if user scrolled up
     unsubRef.current = window.electronAPI.pty.onData(sessionId, (data: string) => {
-      terminal.write(data);
+      if (userScrolledUp) {
+        const viewport = termRef.current?.querySelector('.xterm-viewport');
+        const scrollTop = viewport?.scrollTop ?? 0;
+        terminal.write(data);
+        if (viewport) viewport.scrollTop = scrollTop;
+      } else {
+        terminal.write(data);
+      }
     });
 
     // Handle window resize

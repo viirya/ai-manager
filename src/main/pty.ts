@@ -14,6 +14,22 @@ interface PtyInstance {
 
 const livePtys = new Map<string, PtyInstance>();
 
+// Subscriber system: allows DialogueManager to listen to PTY events in main process
+type PtyDataCallback = (sessionId: string, data: string) => void;
+type PtyExitCallback = (sessionId: string, exitCode: number) => void;
+const dataSubscribers = new Set<PtyDataCallback>();
+const exitSubscribers = new Set<PtyExitCallback>();
+
+export function onPtyData(cb: PtyDataCallback): () => void {
+  dataSubscribers.add(cb);
+  return () => { dataSubscribers.delete(cb); };
+}
+
+export function onPtyExit(cb: PtyExitCallback): () => void {
+  exitSubscribers.add(cb);
+  return () => { exitSubscribers.delete(cb); };
+}
+
 let claudeBinaryPath: string | null = null;
 
 export function detectClaudeBinary(): string {
@@ -93,6 +109,8 @@ function spawnClaudePty(
     if (!window.isDestroyed()) {
       window.webContents.send(`pty:data:${sessionId}`, data);
     }
+    // Notify main-process subscribers (DialogueManager etc.)
+    for (const cb of dataSubscribers) cb(sessionId, data);
   });
 
   ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
@@ -100,6 +118,7 @@ function spawnClaudePty(
     if (!window.isDestroyed()) {
       window.webContents.send(`pty:exit:${sessionId}`, exitCode);
     }
+    for (const cb of exitSubscribers) cb(sessionId, exitCode);
   });
 
   return ptyProcess;

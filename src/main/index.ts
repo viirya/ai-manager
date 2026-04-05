@@ -12,8 +12,11 @@ import {
   getLiveSessions,
   killAllSessions,
 } from './pty';
+import { DialogueManager } from './dialogue';
+import type { DialogueConfig } from './dialogue';
 
 let mainWindow: BrowserWindow | null = null;
+const dialogueManager = new DialogueManager();
 
 // electron-store setup (using v8 which is CJS compatible)
 let store: any = null;
@@ -110,6 +113,8 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  dialogueManager.setWindow(mainWindow);
 }
 
 // =============================================
@@ -350,6 +355,35 @@ function setupIPC() {
   ipcMain.handle('app:getClaudeVersion', async () => {
     return getClaudeVersion();
   });
+
+  // === Dialogue IPC ===
+  ipcMain.handle('dialogue:start', async (_event, config: DialogueConfig) => {
+    return dialogueManager.startDialogue(config);
+  });
+
+  ipcMain.handle('dialogue:pause', async (_event, dialogueId: string) => {
+    return dialogueManager.pauseDialogue(dialogueId);
+  });
+
+  ipcMain.handle('dialogue:resume', async (_event, dialogueId: string) => {
+    return dialogueManager.resumeDialogue(dialogueId);
+  });
+
+  ipcMain.handle('dialogue:stop', async (_event, dialogueId: string) => {
+    return dialogueManager.stopDialogue(dialogueId);
+  });
+
+  ipcMain.handle('dialogue:list', async () => {
+    return dialogueManager.listDialogues();
+  });
+
+  ipcMain.handle('dialogue:get', async (_event, dialogueId: string) => {
+    return dialogueManager.getDialogue(dialogueId);
+  });
+
+  ipcMain.handle('dialogue:isSessionInDialogue', async (_event, sessionId: string) => {
+    return dialogueManager.isSessionInDialogue(sessionId);
+  });
 }
 
 // =============================================
@@ -374,5 +408,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  dialogueManager.destroy();
   killAllSessions();
 });

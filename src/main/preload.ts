@@ -48,6 +48,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getClaudeVersion: () => ipcRenderer.invoke('app:getClaudeVersion'),
   },
+  dialogue: {
+    start: (config: any) => ipcRenderer.invoke('dialogue:start', config),
+    pause: (dialogueId: string) => ipcRenderer.invoke('dialogue:pause', dialogueId),
+    resume: (dialogueId: string) => ipcRenderer.invoke('dialogue:resume', dialogueId),
+    stop: (dialogueId: string) => ipcRenderer.invoke('dialogue:stop', dialogueId),
+    list: () => ipcRenderer.invoke('dialogue:list'),
+    get: (dialogueId: string) => ipcRenderer.invoke('dialogue:get', dialogueId),
+    isSessionInDialogue: (sessionId: string) => ipcRenderer.invoke('dialogue:isSessionInDialogue', sessionId),
+    onUpdate: (callback: (snapshot: any) => void) => {
+      const handler = (_event: any, snapshot: any) => callback(snapshot);
+      ipcRenderer.on('dialogue:update', handler);
+      return () => { ipcRenderer.removeListener('dialogue:update', handler); };
+    },
+  },
   clipboard: {
     writeText: (text: string) => clipboard.writeText(text),
   },

@@ -81,6 +81,16 @@ export interface IElectronAPI {
     getVersion: () => Promise<string>;
     getClaudeVersion: () => Promise<string>;
   };
+  dialogue: {
+    start: (config: any) => Promise<{ success: boolean; dialogueId?: string; error?: string }>;
+    pause: (dialogueId: string) => Promise<boolean>;
+    resume: (dialogueId: string) => Promise<boolean>;
+    stop: (dialogueId: string) => Promise<boolean>;
+    list: () => Promise<any[]>;
+    get: (dialogueId: string) => Promise<any | null>;
+    isSessionInDialogue: (sessionId: string) => Promise<string | null>;
+    onUpdate: (callback: (snapshot: any) => void) => () => void;
+  };
   clipboard: {
     writeText: (text: string) => void;
   };
