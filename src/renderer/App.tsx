@@ -53,7 +53,12 @@ export default function App() {
       setShowSidebar(true);
       setTimeout(() => searchRef.current?.focus(), 100);
     }));
-    unsubs.push(window.electronAPI.on('menu:toggleSidebar', () => setShowSidebar(s => !s)));
+    unsubs.push(window.electronAPI.on('menu:toggleSidebar', () => {
+      setShowSidebar(s => {
+        if (!s) refresh(); // Refresh session list when sidebar becomes visible
+        return !s;
+      });
+    }));
     unsubs.push(window.electronAPI.on('menu:settings', () => setShowSettings(true)));
     unsubs.push(window.electronAPI.on('menu:about', () => setShowAbout(true)));
     unsubs.push(window.electronAPI.on('menu:toggleRaw', () => {
@@ -108,8 +113,18 @@ export default function App() {
 
   const handleDelete = useCallback(
     async (session: SessionInfo) => {
+      // Save sidebar list scroll position before deletion triggers re-render
+      const scrollEl = document.querySelector('[data-sidebar-list]')?.firstElementChild as HTMLElement | null;
+      const scrollTop = scrollEl?.scrollTop ?? 0;
+
       if (liveSessionIds.has(session.id)) handleCloseTab(session.id);
       await deleteSession(session.filePath);
+
+      // Restore after React re-renders
+      requestAnimationFrame(() => {
+        const el = document.querySelector('[data-sidebar-list]')?.firstElementChild as HTMLElement | null;
+        if (el) el.scrollTop = scrollTop;
+      });
     },
     [deleteSession, liveSessionIds, handleCloseTab]
   );
@@ -245,7 +260,7 @@ export default function App() {
         <div className="drag-region h-10 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-900 flex-shrink-0">
           <div className="no-drag flex items-center gap-3">
             <button
-              onClick={() => setShowSidebar(s => !s)}
+              onClick={() => setShowSidebar(s => { if (!s) refresh(); return !s; })}
               className="text-slate-500 hover:text-slate-300 transition-colors p-1"
               title={showSidebar ? 'Hide sidebar (Cmd+B)' : 'Show sidebar (Cmd+B)'}
             >

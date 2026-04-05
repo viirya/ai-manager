@@ -299,7 +299,7 @@ export default function Sidebar({
       )}
 
       {/* Session list (virtualized) */}
-      <div ref={listContainerRef} className="flex-1 overflow-hidden">
+      <div ref={listContainerRef} data-sidebar-list className="flex-1 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-pulse text-sm text-slate-500">Loading sessions...</div>
