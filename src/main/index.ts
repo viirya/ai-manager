@@ -166,6 +166,17 @@ function buildAppMenu() {
           click: () => mainWindow?.webContents.send('menu:closeTab'),
         },
         { type: 'separator' },
+        {
+          label: 'Previous Tab',
+          accelerator: 'Shift+CmdOrCtrl+[',
+          click: () => mainWindow?.webContents.send('menu:prevTab'),
+        },
+        {
+          label: 'Next Tab',
+          accelerator: 'Shift+CmdOrCtrl+]',
+          click: () => mainWindow?.webContents.send('menu:nextTab'),
+        },
+        { type: 'separator' },
         ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({
           label: `Tab ${n}`,
           accelerator: `CmdOrCtrl+${n}` as string,

@@ -74,6 +74,18 @@ export default function App() {
     unsubs.push(window.electronAPI.on('menu:switchTab', (index: number) => {
       if (liveTabs[index]) setActiveTabId(liveTabs[index].sessionId);
     }));
+    unsubs.push(window.electronAPI.on('menu:prevTab', () => {
+      if (liveTabs.length < 2 || !activeTabId) return;
+      const idx = liveTabs.findIndex(t => t.sessionId === activeTabId);
+      const prev = (idx - 1 + liveTabs.length) % liveTabs.length;
+      setActiveTabId(liveTabs[prev].sessionId);
+    }));
+    unsubs.push(window.electronAPI.on('menu:nextTab', () => {
+      if (liveTabs.length < 2 || !activeTabId) return;
+      const idx = liveTabs.findIndex(t => t.sessionId === activeTabId);
+      const next = (idx + 1) % liveTabs.length;
+      setActiveTabId(liveTabs[next].sessionId);
+    }));
     unsubs.push(window.electronAPI.on('menu:focusSearch', () => {
       setShowSidebar(true);
       setTimeout(() => searchRef.current?.focus(), 100);
@@ -332,7 +344,7 @@ export default function App() {
                   {sessionMeta[activeTabId]?.customTitle ||
                     liveTabs.find((t) => t.sessionId === activeTabId)?.title || ''}
                 </h1>
-                <span className="text-xs text-slate-600 font-mono">
+                <span className="text-xs text-slate-400 font-mono">
                   {liveTabs.find((t) => t.sessionId === activeTabId)?.cwd || ''}
                 </span>
               </>

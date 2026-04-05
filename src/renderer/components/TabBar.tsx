@@ -51,7 +51,7 @@ export default function TabBar({ tabs, activeId, onSelect, onClose }: TabBarProp
                 e.stopPropagation();
                 onClose(tab.sessionId);
               }}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 transition-all text-xs"
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded hover:bg-red-900/50 text-slate-400 hover:text-red-400 transition-all text-xs"
             >
               x
             </button>
