@@ -34,6 +34,14 @@ Click "+ New Session" to get a modal with a native directory picker and optional
 
 Accessible via the gear icon or `Cmd+,`. Configure the Claude binary path (auto-detected, with a Verify button), default working directory, theme, font sizes for chat and terminal, auto-scroll behavior, and whether new sessions show the raw terminal by default. A danger zone lets you clear all custom metadata or reset to defaults.
 
+### Multi-Session Dialogue
+
+Make two or more Claude Code sessions talk to each other. When a dialogue is active, the app waits for one session to finish responding, extracts the clean text (stripping ANSI codes and Claude Code UI artifacts), and forwards it as input to the next session — automatically, in a loop.
+
+Three modes are available: **Pair** (two sessions ping-pong back and forth), **Pipeline** (responses flow round-robin through all sessions), and **Broadcast** (same as pipeline, for now). Each session can be given an optional **role prompt** before the dialogue starts (e.g. "You are a code reviewer"), and you provide an **initial message** to kick things off.
+
+The dialogue runs until one of: max turn count reached, a configurable stop keyword appears in a response, a session exits, or you manually stop it. A dedicated Dialogue View shows the full transcript with color-coded turns, an active-session indicator, and Pause/Resume/Stop controls.
+
 ### macOS Native
 
 Full menu bar (Session, Edit, View, Window), native right-click context menus on sidebar items, window position/size persistence across restarts, and a resizable sidebar with drag handle.
@@ -96,6 +104,7 @@ ELECTRON_RUN_AS_NODE= npx electron .
 | `Cmd+1` – `Cmd+9` | Switch to tab by index |
 | `Cmd+F` | Focus sidebar search |
 | `Cmd+,` | Open settings |
+| `Cmd+B` | Toggle sidebar |
 | `Cmd+Shift+R` | Toggle raw terminal |
 
 ## Project Structure
@@ -106,6 +115,7 @@ src/
 │   ├── index.ts           # Window management, menu bar, IPC handlers, window state
 │   ├── preload.ts         # contextBridge — exposes electronAPI to renderer
 │   ├── pty.ts             # PTY manager — spawns/tracks claude processes via node-pty
+│   ├── dialogue.ts        # DialogueManager — routes output between sessions
 │   └── sessions.ts        # Session discovery — reads ~/.claude/ JSONL files
 │
 ├── renderer/              # React UI (bundled by Vite)
@@ -113,10 +123,12 @@ src/
 │   ├── main.tsx           # React entry point
 │   ├── components/
 │   │   ├── AboutDialog.tsx
+│   │   ├── DialogueSetupModal.tsx  # Dialogue config: mode, sessions, roles, stop conditions
+│   │   ├── DialogueView.tsx        # Dialogue transcript with controls
 │   │   ├── EmptyState.tsx
 │   │   ├── NewSessionModal.tsx
 │   │   ├── RawTerminal.tsx      # xterm.js wrapper with FitAddon
-│   │   ├── SessionView.tsx      # Chat panel + raw terminal + input bar
+│   │   ├── SessionView.tsx      # Raw terminal + input bar
 │   │   ├── SettingsPanel.tsx
 │   │   ├── Sidebar.tsx          # Virtualized session list (react-window)
 │   │   └── TabBar.tsx
@@ -152,11 +164,22 @@ Raw PTY output goes through several stages before reaching the chat panel:
 
 The raw xterm.js terminal receives unprocessed PTY output, so nothing is lost.
 
+### Dialogue Routing
+
+The DialogueManager in the main process subscribes to PTY data events via a callback system. When a dialogue is active, it accumulates output from the current session, waits for idle (3s silence, or 1s if a prompt character is detected), then:
+
+1. Strips ANSI escape codes (full ECMA-48 CSI coverage)
+2. Strips Claude Code UI artifacts (box drawing, spinners, thinking animations, status bar text)
+3. Records the clean text as a turn in the transcript
+4. Checks stop conditions (max turns, keyword, PTY exit)
+5. Forwards the text to the next session with an attribution prefix
+
+A 1.5s delay after sending input skips the PTY echo and Claude Code's UI initialization before output collection begins.
+
 ## Roadmap
 
 - [ ] PR review mode — paste a GitHub PR URL, auto-load the diff as context into a new session
 - [ ] Full-text search across session message content
-- [ ] Broadcast a message to multiple live sessions simultaneously
 - [ ] Export conversation as Markdown
 
 ## License
