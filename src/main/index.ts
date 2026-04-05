@@ -103,7 +103,6 @@ function createWindow() {
   if (isDev) {
     const port = process.env.VITE_PORT || '5173';
     mainWindow.loadURL(`http://localhost:${port}`);
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
   }
