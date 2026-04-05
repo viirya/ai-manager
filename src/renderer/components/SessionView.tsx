@@ -38,8 +38,12 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
     setInputText('');
   }, [inputText, isLive, sendMessage]);
 
+  const composingRef = useRef(false);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Ignore Enter during IME composition (e.g. Chinese input method selecting a candidate)
+      if (composingRef.current) return;
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
@@ -104,6 +108,8 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
               value={inputText}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onCompositionStart={() => { composingRef.current = true; }}
+              onCompositionEnd={() => { composingRef.current = false; }}
               placeholder={
                 isLive
                   ? isWaiting
