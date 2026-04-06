@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -15,6 +15,8 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const unsubRef = useRef<(() => void) | null>(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+  const userScrolledUpRef = useRef(false);
 
   useEffect(() => {
     if (!termRef.current) return;
@@ -77,23 +79,21 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
       window.electronAPI.pty.write(sessionId, data);
     });
 
-    // Track if user has scrolled up
-    let userScrolledUp = false;
-    terminal.onScroll(() => {
-      const viewport = termRef.current?.querySelector('.xterm-viewport');
-      if (viewport) {
-        const distFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-        userScrolledUp = distFromBottom > 50;
-      }
-    });
+    // Track scroll position via polling xterm.js buffer API
+    // (DOM scroll events are unreliable with WebGL renderer)
+    const scrollCheckInterval = setInterval(() => {
+      const buf = terminal.buffer.active;
+      const atBottom = buf.viewportY >= buf.baseY;
+      userScrolledUpRef.current = !atBottom;
+      setShowScrollDown(!atBottom);
+    }, 300);
 
     // Subscribe to PTY output — preserve scroll if user scrolled up
     unsubRef.current = window.electronAPI.pty.onData(sessionId, (data: string) => {
-      if (userScrolledUp) {
-        const viewport = termRef.current?.querySelector('.xterm-viewport');
-        const scrollTop = viewport?.scrollTop ?? 0;
+      if (userScrolledUpRef.current) {
+        const savedY = terminal.buffer.active.viewportY;
         terminal.write(data);
-        if (viewport) viewport.scrollTop = scrollTop;
+        terminal.scrollToLine(savedY);
       } else {
         terminal.write(data);
       }
@@ -128,6 +128,7 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('redraw-terminal', handleRedraw);
+      clearInterval(scrollCheckInterval);
       resizeObserver.disconnect();
       if (unsubRef.current) unsubRef.current();
       terminal.dispose();
@@ -160,11 +161,33 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
     };
   }, [active, onResize]);
 
+  const scrollToBottom = useCallback(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollToBottom();
+      userScrolledUpRef.current = false;
+      setShowScrollDown(false);
+    }
+  }, []);
+
   return (
-    <div
-      ref={termRef}
-      className="h-full w-full bg-slate-950"
-      style={{ padding: '4px' }}
-    />
+    <div className="relative h-full w-full bg-slate-950">
+      <div
+        ref={termRef}
+        className="h-full w-full"
+        style={{ padding: '4px' }}
+      />
+      {showScrollDown && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-4 right-4 w-8 h-8 flex items-center justify-center bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-full shadow-lg transition-colors"
+          style={{ zIndex: 20 }}
+          title="Scroll to bottom"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
