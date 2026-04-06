@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
 import * as path from 'path';
 import { execSync } from 'child_process';
+
+app.setName('Claude Code Manager');
 import { discoverSessions, readSessionMessages, deleteSession, findClaudeBinary } from './sessions';
 import {
   spawnSession,
@@ -128,7 +130,7 @@ function buildAppMenu() {
     ...(isMac
       ? [
           {
-            label: app.name,
+            label: 'Claude Code Manager',
             submenu: [
               {
                 label: 'About Claude Code Manager',
