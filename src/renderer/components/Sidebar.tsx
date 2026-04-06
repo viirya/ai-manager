@@ -252,7 +252,7 @@ export default function Sidebar({
       style={{ width }}
     >
       {/* Title bar */}
-      <div className="drag-region h-10 flex items-center px-4 border-b border-slate-800">
+      <div className="drag-region h-10 flex items-center border-b border-slate-800" style={{ paddingLeft: 78 }}>
         <span className="text-sm font-semibold text-slate-400 no-drag">
           Claude Code Manager
         </span>
