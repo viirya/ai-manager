@@ -27,7 +27,7 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
         foreground: '#e2e8f0',
         cursor: '#818cf8',
         cursorAccent: '#0f172a',
-        selectionBackground: '#334155',
+        selectionBackground: '#264f78',
         black: '#1e293b',
         red: '#f87171',
         green: '#4ade80',
