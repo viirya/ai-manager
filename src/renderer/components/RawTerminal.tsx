@@ -114,8 +114,20 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
     });
     resizeObserver.observe(termRef.current);
 
+    // Redraw: jiggle PTY size to force the app to repaint
+    const handleRedraw = () => {
+      const cols = terminal.cols;
+      const rows = terminal.rows;
+      window.electronAPI.pty.resize(sessionId, cols - 1, rows);
+      setTimeout(() => {
+        window.electronAPI.pty.resize(sessionId, cols, rows);
+      }, 50);
+    };
+    window.addEventListener('redraw-terminal', handleRedraw);
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('redraw-terminal', handleRedraw);
       resizeObserver.disconnect();
       if (unsubRef.current) unsubRef.current();
       terminal.dispose();

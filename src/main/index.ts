@@ -211,6 +211,11 @@ function buildAppMenu() {
       label: 'View',
       submenu: [
         {
+          label: 'Redraw Terminal',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => mainWindow?.webContents.send('menu:redrawTerminal'),
+        },
+        {
           label: 'Toggle Sidebar',
           accelerator: 'CmdOrCtrl+B',
           click: () => mainWindow?.webContents.send('menu:toggleSidebar'),

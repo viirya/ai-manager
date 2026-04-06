@@ -90,6 +90,9 @@ export default function App() {
       setShowSidebar(true);
       setTimeout(() => searchRef.current?.focus(), 100);
     }));
+    unsubs.push(window.electronAPI.on('menu:redrawTerminal', () => {
+      window.dispatchEvent(new CustomEvent('redraw-terminal'));
+    }));
     unsubs.push(window.electronAPI.on('menu:toggleSidebar', () => {
       setShowSidebar(s => {
         if (!s) refresh();
