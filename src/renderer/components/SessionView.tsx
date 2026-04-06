@@ -31,9 +31,14 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
     }
   }, [active]);
 
+  const inputHistoryRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+
   const handleSend = useCallback(() => {
     const text = inputText.trim();
     if (!text || !isLive) return;
+    inputHistoryRef.current.push(text);
+    historyIndexRef.current = -1;
     sendMessage(text);
     setInputText('');
   }, [inputText, isLive, sendMessage]);
@@ -42,11 +47,33 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Ignore Enter during IME composition (e.g. Chinese input method selecting a candidate)
       if (composingRef.current) return;
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
+      }
+      // Arrow Up/Down for input history (only when input is empty or already browsing history)
+      if (e.key === 'ArrowUp' && inputHistoryRef.current.length > 0) {
+        e.preventDefault();
+        const history = inputHistoryRef.current;
+        if (historyIndexRef.current === -1) {
+          historyIndexRef.current = history.length - 1;
+        } else if (historyIndexRef.current > 0) {
+          historyIndexRef.current--;
+        }
+        setInputText(history[historyIndexRef.current]);
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const history = inputHistoryRef.current;
+        if (historyIndexRef.current === -1) return;
+        if (historyIndexRef.current < history.length - 1) {
+          historyIndexRef.current++;
+          setInputText(history[historyIndexRef.current]);
+        } else {
+          historyIndexRef.current = -1;
+          setInputText('');
+        }
       }
     },
     [handleSend]
