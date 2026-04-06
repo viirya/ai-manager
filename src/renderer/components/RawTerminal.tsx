@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 
 interface RawTerminalProps {
@@ -47,12 +48,18 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
       lineHeight: 1.3,
       cursorBlink: true,
       scrollback: 10000,
-      convertEol: true,
     });
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(termRef.current);
+
+    // WebGL renderer for better text alignment and selection
+    try {
+      terminal.loadAddon(new WebglAddon());
+    } catch {
+      // WebGL not available, fall back to canvas renderer
+    }
 
     // Fit after a tick so the container has dimensions
     requestAnimationFrame(() => {
