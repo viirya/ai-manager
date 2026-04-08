@@ -33,6 +33,7 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
 
   const inputHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
+  const savedInputRef = useRef(''); // saves current input when starting to browse history
 
   const handleSend = useCallback(() => {
     const text = inputText.trim();
@@ -52,27 +53,30 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
         e.preventDefault();
         handleSend();
       }
-      // Arrow Up/Down for input history (only when input is empty or already browsing history)
+      // Arrow Up: browse input history, save current input on first press
       if (e.key === 'ArrowUp' && inputHistoryRef.current.length > 0) {
         e.preventDefault();
         const history = inputHistoryRef.current;
         if (historyIndexRef.current === -1) {
+          savedInputRef.current = (e.target as HTMLTextAreaElement).value;
           historyIndexRef.current = history.length - 1;
         } else if (historyIndexRef.current > 0) {
           historyIndexRef.current--;
         }
         setInputText(history[historyIndexRef.current]);
       }
-      if (e.key === 'ArrowDown') {
+      // Arrow Down: only when browsing history
+      if (e.key === 'ArrowDown' && historyIndexRef.current !== -1) {
         e.preventDefault();
         const history = inputHistoryRef.current;
-        if (historyIndexRef.current === -1) return;
         if (historyIndexRef.current < history.length - 1) {
           historyIndexRef.current++;
           setInputText(history[historyIndexRef.current]);
         } else {
+          // Back to the saved input
           historyIndexRef.current = -1;
-          setInputText('');
+          setInputText(savedInputRef.current);
+          savedInputRef.current = '';
         }
       }
     },
