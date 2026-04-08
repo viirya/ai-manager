@@ -34,6 +34,10 @@ Click "+ New Session" to get a modal with a native directory picker and optional
 
 Accessible via the gear icon or `Cmd+,`. Configure the Claude binary path (auto-detected, with a Verify button), default working directory, theme, font sizes for chat and terminal, auto-scroll behavior, and whether new sessions show the raw terminal by default. A danger zone lets you clear all custom metadata or reset to defaults.
 
+### Context Panel (CLAUDE.md)
+
+Press `Cmd+E` to open a split editor panel alongside the terminal that reads and edits the `CLAUDE.md` file in the session's working directory. This is the file Claude Code uses for project-level instructions and context. You can create, edit, save (`Cmd+S`), or delete it directly from the app without switching to a separate editor.
+
 ### Multi-Session Dialogue
 
 Make two or more Claude Code sessions talk to each other. When a dialogue is active, the app waits for one session to finish responding, extracts the clean text (stripping ANSI codes and Claude Code UI artifacts), and forwards it as input to the next session — automatically, in a loop.
@@ -104,8 +108,11 @@ ELECTRON_RUN_AS_NODE= npx electron .
 | `Cmd+1` – `Cmd+9` | Switch to tab by index |
 | `Cmd+F` | Focus sidebar search |
 | `Cmd+,` | Open settings |
+| `Cmd+E` | Toggle CLAUDE.md context panel |
 | `Cmd+B` | Toggle sidebar |
-| `Cmd+Shift+R` | Toggle raw terminal |
+| `Cmd+R` | Redraw terminal |
+| `Cmd+Shift+[` | Previous tab |
+| `Cmd+Shift+]` | Next tab |
 
 ## Project Structure
 
@@ -127,8 +134,9 @@ src/
 │   │   ├── DialogueView.tsx        # Dialogue transcript with controls
 │   │   ├── EmptyState.tsx
 │   │   ├── NewSessionModal.tsx
-│   │   ├── RawTerminal.tsx      # xterm.js wrapper with FitAddon
-│   │   ├── SessionView.tsx      # Raw terminal + input bar
+│   │   ├── ContextPanel.tsx      # CLAUDE.md editor panel
+│   │   ├── RawTerminal.tsx      # xterm.js wrapper with FitAddon + WebGL
+│   │   ├── SessionView.tsx      # Terminal + input bar + context panel
 │   │   ├── SettingsPanel.tsx
 │   │   ├── Sidebar.tsx          # Virtualized session list (react-window)
 │   │   └── TabBar.tsx
