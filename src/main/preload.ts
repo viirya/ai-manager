@@ -48,6 +48,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
     getClaudeVersion: () => ipcRenderer.invoke('app:getClaudeVersion'),
   },
+  file: {
+    read: (filePath: string) => ipcRenderer.invoke('file:read', filePath),
+    write: (filePath: string, content: string) => ipcRenderer.invoke('file:write', filePath, content),
+    delete: (filePath: string) => ipcRenderer.invoke('file:delete', filePath),
+  },
   dialogue: {
     start: (config: any) => ipcRenderer.invoke('dialogue:start', config),
     pause: (dialogueId: string) => ipcRenderer.invoke('dialogue:pause', dialogueId),

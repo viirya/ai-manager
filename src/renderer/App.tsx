@@ -93,6 +93,9 @@ export default function App() {
     unsubs.push(window.electronAPI.on('menu:redrawTerminal', () => {
       window.dispatchEvent(new CustomEvent('redraw-terminal'));
     }));
+    unsubs.push(window.electronAPI.on('menu:toggleContext', () => {
+      window.dispatchEvent(new CustomEvent('toggle-context-panel'));
+    }));
     unsubs.push(window.electronAPI.on('menu:toggleSidebar', () => {
       setShowSidebar(s => {
         if (!s) refresh();

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import RawTerminal from './RawTerminal';
+import ContextPanel from './ContextPanel';
 import { usePty } from '../hooks/usePty';
 
 interface SessionViewProps {
@@ -11,6 +12,7 @@ interface SessionViewProps {
 
 export default function SessionView({ sessionId, cwd, active, alreadySpawned }: SessionViewProps) {
   const [inputText, setInputText] = useState('');
+  const [showContext, setShowContext] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const {
@@ -31,9 +33,18 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
     }
   }, [active]);
 
+  // Listen for Cmd+E toggle from menu
+  useEffect(() => {
+    const handler = () => {
+      if (active) setShowContext(s => !s);
+    };
+    window.addEventListener('toggle-context-panel', handler);
+    return () => window.removeEventListener('toggle-context-panel', handler);
+  }, [active]);
+
   const inputHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
-  const savedInputRef = useRef(''); // saves current input when starting to browse history
+  const savedInputRef = useRef('');
 
   const handleSend = useCallback(() => {
     const text = inputText.trim();
@@ -73,7 +84,6 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
           historyIndexRef.current++;
           setInputText(history[historyIndexRef.current]);
         } else {
-          // Back to the saved input
           historyIndexRef.current = -1;
           setInputText(savedInputRef.current);
           savedInputRef.current = '';
@@ -125,9 +135,16 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
         </div>
       )}
 
-      {/* Terminal — full width, primary view */}
-      <div className="flex-1 overflow-hidden">
-        <RawTerminal sessionId={sessionId} active={active} onResize={handleResize} />
+      {/* Terminal + optional Context panel */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className={`${showContext ? 'w-1/2' : 'w-full'} overflow-hidden`}>
+          <RawTerminal sessionId={sessionId} active={active} onResize={handleResize} />
+        </div>
+        {showContext && (
+          <div className="w-1/2 overflow-hidden">
+            <ContextPanel cwd={cwd} onClose={() => setShowContext(false)} />
+          </div>
+        )}
       </div>
 
       {/* Input bar */}

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { execSync } from 'child_process';
 
 app.setName('Claude Code Manager');
@@ -213,6 +214,11 @@ function buildAppMenu() {
       label: 'View',
       submenu: [
         {
+          label: 'Toggle Context (CLAUDE.md)',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => mainWindow?.webContents.send('menu:toggleContext'),
+        },
+        {
           label: 'Redraw Terminal',
           accelerator: 'CmdOrCtrl+R',
           click: () => mainWindow?.webContents.send('menu:redrawTerminal'),
@@ -372,6 +378,39 @@ function setupIPC() {
 
   ipcMain.handle('app:getClaudeVersion', async () => {
     return getClaudeVersion();
+  });
+
+  // === File IPC (for CLAUDE.md) ===
+  ipcMain.handle('file:read', async (_event, filePath: string) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        return { content: fs.readFileSync(filePath, 'utf-8'), exists: true };
+      }
+      return { content: '', exists: false };
+    } catch (err: any) {
+      return { content: '', exists: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('file:delete', async (_event, filePath: string) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        return { success: true };
+      }
+      return { success: false, error: 'File not found' };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('file:write', async (_event, filePath: string, content: string) => {
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   });
 
   // === Dialogue IPC ===

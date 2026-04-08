@@ -81,6 +81,11 @@ export interface IElectronAPI {
     getVersion: () => Promise<string>;
     getClaudeVersion: () => Promise<string>;
   };
+  file: {
+    read: (filePath: string) => Promise<{ content: string; exists: boolean; error?: string }>;
+    write: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
+    delete: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  };
   dialogue: {
     start: (config: any) => Promise<{ success: boolean; dialogueId?: string; error?: string }>;
     pause: (dialogueId: string) => Promise<boolean>;
