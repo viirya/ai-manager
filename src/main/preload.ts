@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('pty:spawnNew', cwd),
     spawnRemote: (sessionId: string, hostKey: string, cwd?: string) =>
       ipcRenderer.invoke('pty:spawnRemote', sessionId, hostKey, cwd),
+    spawnNewRemote: (hostKey: string, cwd?: string) =>
+      ipcRenderer.invoke('pty:spawnNewRemote', hostKey, cwd),
     write: (sessionId: string, data: string) =>
       ipcRenderer.send('pty:write', sessionId, data),
     kill: (sessionId: string) =>

@@ -73,6 +73,7 @@ export interface IElectronAPI {
     spawn: (sessionId: string, cwd: string) => Promise<PtySpawnResult>;
     spawnNew: (cwd: string) => Promise<PtySpawnResult>;
     spawnRemote: (sessionId: string, hostKey: string, cwd?: string) => Promise<PtySpawnResult>;
+    spawnNewRemote: (hostKey: string, cwd?: string) => Promise<PtySpawnResult>;
     write: (sessionId: string, data: string) => void;
     kill: (sessionId: string) => void;
     resize: (sessionId: string, cols: number, rows: number) => void;

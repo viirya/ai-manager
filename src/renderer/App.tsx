@@ -189,16 +189,19 @@ export default function App() {
   );
 
   const handleNewSessionConfirm = useCallback(
-    async (cwd: string, title: string) => {
+    async (cwd: string, title: string, remote?: string) => {
       setShowNewSessionModal(false);
-      const result = await window.electronAPI.pty.spawnNew(cwd);
+      const result = remote
+        ? await window.electronAPI.pty.spawnNewRemote(remote, cwd)
+        : await window.electronAPI.pty.spawnNew(cwd);
       if (result.success && result.sessionId) {
-        const tabTitle = title || 'New Session';
+        const tabTitle = title || (remote ? `New Session (${remote})` : 'New Session');
         setLiveTabs((prev) => [...prev, {
           sessionId: result.sessionId!,
           title: tabTitle,
           cwd: cwd || '~',
           alreadySpawned: true,
+          remote,
         }]);
         setActiveTabId(result.sessionId);
         if (title) updateMeta(result.sessionId, { customTitle: title });

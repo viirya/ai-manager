@@ -323,6 +323,18 @@ function setupIPC() {
     return spawnRemoteSession(sessionId, command, args, mainWindow);
   });
 
+  ipcMain.handle('pty:spawnNewRemote', async (_event, hostKey: string, cwd?: string) => {
+    if (!mainWindow) return { success: false, error: 'No window' };
+    const s = getStoreSync();
+    const hosts: RemoteHostConfig[] = s.get('remoteHosts') || [];
+    const host = hosts.find((h: RemoteHostConfig) => `${h.user}@${h.host}` === hostKey);
+    if (!host) return { success: false, error: 'Host not found' };
+    const tempId = `${hostKey}:new-${Date.now()}`;
+    const { command, args } = buildRemoteClaudeArgs(host, '', cwd);
+    const result = spawnRemoteSession(tempId, command, args, mainWindow);
+    return { ...result, sessionId: tempId };
+  });
+
   ipcMain.on('pty:write', (_event, sessionId: string, data: string) => {
     writeToSession(sessionId, data);
   });
