@@ -79,21 +79,31 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
       window.electronAPI.pty.write(sessionId, data);
     });
 
-    // Track scroll position via polling xterm.js buffer API
-    // (DOM scroll events are unreliable with WebGL renderer)
+    // Find the viewport DOM element for scroll preservation
+    // (xterm.js buffer API is unreliable when Claude Code redraws its TUI)
+    const getViewport = () => termRef.current?.querySelector('.xterm-viewport') as HTMLElement | null;
+
+    // Track scroll position via polling
     const scrollCheckInterval = setInterval(() => {
-      const buf = terminal.buffer.active;
-      const atBottom = buf.viewportY >= buf.baseY;
-      userScrolledUpRef.current = !atBottom;
-      setShowScrollDown(!atBottom);
+      const vp = getViewport();
+      if (vp) {
+        const distFromBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight;
+        const scrolledUp = distFromBottom > 50;
+        userScrolledUpRef.current = scrolledUp;
+        setShowScrollDown(scrolledUp);
+      }
     }, 300);
 
-    // Subscribe to PTY output — preserve scroll if user scrolled up
+    // Subscribe to PTY output — preserve DOM scroll position if user scrolled up
     unsubRef.current = window.electronAPI.pty.onData(sessionId, (data: string) => {
       if (userScrolledUpRef.current) {
-        const savedY = terminal.buffer.active.viewportY;
+        const vp = getViewport();
+        const savedScrollTop = vp?.scrollTop ?? 0;
         terminal.write(data);
-        terminal.scrollToLine(savedY);
+        // Restore after xterm.js processes the write
+        requestAnimationFrame(() => {
+          if (vp) vp.scrollTop = savedScrollTop;
+        });
       } else {
         terminal.write(data);
       }
