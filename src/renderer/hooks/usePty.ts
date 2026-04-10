@@ -75,9 +75,10 @@ interface UsePtyOptions {
   cwd: string;
   autoSpawn?: boolean;
   skipSpawn?: boolean; // If true, PTY already exists — just subscribe, don't spawn
+  remote?: string;     // 'user@host' — use SSH to spawn
 }
 
-export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false }: UsePtyOptions) {
+export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false, remote }: UsePtyOptions) {
   const [rawOutput, setRawOutput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLive, setIsLive] = useState(false);
@@ -246,7 +247,9 @@ export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false }: 
     setMessages([]);
     sentMessagesRef.current = [];
 
-    const result = await window.electronAPI.pty.spawn(sessionId, cwd);
+    const result = remote
+      ? await window.electronAPI.pty.spawnRemote(sessionId, remote, cwd)
+      : await window.electronAPI.pty.spawn(sessionId, cwd);
     if (!result.success) {
       setError(result.error || 'Failed to spawn PTY');
       return false;
@@ -256,7 +259,7 @@ export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false }: 
     setIsWaiting(false);
     subscribe();
     return true;
-  }, [sessionId, cwd, subscribe]);
+  }, [sessionId, cwd, remote, subscribe]);
 
   // On mount: spawn or just subscribe if PTY already exists
   useEffect(() => {

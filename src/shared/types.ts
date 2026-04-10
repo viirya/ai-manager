@@ -8,6 +8,15 @@ export interface SessionInfo {
   messageCount: number;
   status: 'archived' | 'live';
   filePath: string;
+  remote?: string; // 'user@host' if remote, undefined if local
+}
+
+export interface RemoteHost {
+  name: string;       // display name
+  user: string;
+  host: string;
+  port: number;
+  keyPath: string;    // path to SSH private key (empty = use default)
 }
 
 export interface SessionMessage {
@@ -55,12 +64,15 @@ export interface SessionMeta {
 export interface IElectronAPI {
   sessions: {
     list: () => Promise<SessionInfo[]>;
+    listRemote: (hostKey: string) => Promise<SessionInfo[]>;
     read: (filePath: string) => Promise<SessionMessage[]>;
     delete: (filePath: string) => Promise<void>;
+    deleteRemote: (hostKey: string, remoteFilePath: string) => Promise<{ success: boolean; error?: string }>;
   };
   pty: {
     spawn: (sessionId: string, cwd: string) => Promise<PtySpawnResult>;
     spawnNew: (cwd: string) => Promise<PtySpawnResult>;
+    spawnRemote: (sessionId: string, hostKey: string, cwd?: string) => Promise<PtySpawnResult>;
     write: (sessionId: string, data: string) => void;
     kill: (sessionId: string) => void;
     resize: (sessionId: string, cols: number, rows: number) => void;

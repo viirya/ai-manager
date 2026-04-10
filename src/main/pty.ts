@@ -139,6 +139,53 @@ export function spawnSession(
   }
 }
 
+export function spawnRemoteSession(
+  sessionId: string,
+  sshCommand: string,
+  sshArgs: string[],
+  window: BrowserWindow
+): { success: boolean; error?: string } {
+  killSession(sessionId);
+
+  try {
+    const env = buildPtyEnv();
+    const ptyProcess = pty.spawn(sshCommand, sshArgs, {
+      name: 'xterm-256color',
+      cols: 120,
+      rows: 30,
+      cwd: os.homedir(),
+      env,
+    });
+
+    const instance: PtyInstance = {
+      process: ptyProcess,
+      sessionId,
+      cwd: '~',
+    };
+
+    livePtys.set(sessionId, instance);
+
+    ptyProcess.onData((data: string) => {
+      if (!window.isDestroyed()) {
+        window.webContents.send(`pty:data:${sessionId}`, data);
+      }
+      for (const cb of dataSubscribers) cb(sessionId, data);
+    });
+
+    ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
+      livePtys.delete(sessionId);
+      if (!window.isDestroyed()) {
+        window.webContents.send(`pty:exit:${sessionId}`, exitCode);
+      }
+      for (const cb of exitSubscribers) cb(sessionId, exitCode);
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
 export function spawnNewSession(
   cwd: string,
   window: BrowserWindow

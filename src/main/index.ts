@@ -7,6 +7,7 @@ app.setName('Claude Code Manager');
 import { discoverSessions, readSessionMessages, deleteSession, findClaudeBinary } from './sessions';
 import {
   spawnSession,
+  spawnRemoteSession,
   spawnNewSession,
   writeToSession,
   killSession,
@@ -17,6 +18,8 @@ import {
 } from './pty';
 import { DialogueManager } from './dialogue';
 import type { DialogueConfig } from './dialogue';
+import { discoverRemoteSessions, deleteRemoteSession, buildRemoteClaudeArgs } from './remote-sessions';
+import type { RemoteHostConfig } from './remote-sessions';
 
 let mainWindow: BrowserWindow | null = null;
 const dialogueManager = new DialogueManager();
@@ -282,6 +285,22 @@ function setupIPC() {
     deleteSession(filePath);
   });
 
+  ipcMain.handle('sessions:listRemote', async (_event, hostKey: string) => {
+    const s = getStoreSync();
+    const hosts: RemoteHostConfig[] = s.get('remoteHosts') || [];
+    const host = hosts.find((h: RemoteHostConfig) => `${h.user}@${h.host}` === hostKey);
+    if (!host) return [];
+    return discoverRemoteSessions(host);
+  });
+
+  ipcMain.handle('sessions:deleteRemote', async (_event, hostKey: string, remoteFilePath: string) => {
+    const s = getStoreSync();
+    const hosts: RemoteHostConfig[] = s.get('remoteHosts') || [];
+    const host = hosts.find((h: RemoteHostConfig) => `${h.user}@${h.host}` === hostKey);
+    if (!host) return { success: false, error: 'Host not found' };
+    return deleteRemoteSession(host, remoteFilePath);
+  });
+
   // === PTY IPC ===
   ipcMain.handle('pty:spawn', async (_event, sessionId: string, cwd: string) => {
     if (!mainWindow) return { success: false, error: 'No window' };
@@ -291,6 +310,17 @@ function setupIPC() {
   ipcMain.handle('pty:spawnNew', async (_event, cwd: string) => {
     if (!mainWindow) return { success: false, error: 'No window' };
     return spawnNewSession(cwd, mainWindow);
+  });
+
+  ipcMain.handle('pty:spawnRemote', async (_event, sessionId: string, hostKey: string, cwd?: string) => {
+    if (!mainWindow) return { success: false, error: 'No window' };
+    const s = getStoreSync();
+    const hosts: RemoteHostConfig[] = s.get('remoteHosts') || [];
+    const host = hosts.find((h: RemoteHostConfig) => `${h.user}@${h.host}` === hostKey);
+    if (!host) return { success: false, error: 'Host not found' };
+    const uuid = sessionId.includes(':') ? sessionId.split(':').pop()! : sessionId;
+    const { command, args } = buildRemoteClaudeArgs(host, uuid, cwd);
+    return spawnRemoteSession(sessionId, command, args, mainWindow);
   });
 
   ipcMain.on('pty:write', (_event, sessionId: string, data: string) => {

@@ -3,14 +3,19 @@ const { contextBridge, ipcRenderer, clipboard } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   sessions: {
     list: () => ipcRenderer.invoke('sessions:list'),
+    listRemote: (hostKey: string) => ipcRenderer.invoke('sessions:listRemote', hostKey),
     read: (filePath: string) => ipcRenderer.invoke('sessions:read', filePath),
     delete: (filePath: string) => ipcRenderer.invoke('sessions:delete', filePath),
+    deleteRemote: (hostKey: string, remoteFilePath: string) =>
+      ipcRenderer.invoke('sessions:deleteRemote', hostKey, remoteFilePath),
   },
   pty: {
     spawn: (sessionId: string, cwd: string) =>
       ipcRenderer.invoke('pty:spawn', sessionId, cwd),
     spawnNew: (cwd: string) =>
       ipcRenderer.invoke('pty:spawnNew', cwd),
+    spawnRemote: (sessionId: string, hostKey: string, cwd?: string) =>
+      ipcRenderer.invoke('pty:spawnRemote', sessionId, hostKey, cwd),
     write: (sessionId: string, data: string) =>
       ipcRenderer.send('pty:write', sessionId, data),
     kill: (sessionId: string) =>

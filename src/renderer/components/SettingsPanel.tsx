@@ -7,7 +7,17 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-type Section = 'general' | 'appearance' | 'sessions' | 'danger';
+interface RemoteHost {
+  name: string;
+  user: string;
+  host: string;
+  port: number;
+  keyPath: string;
+}
+
+const emptyHost: RemoteHost = { name: '', user: '', host: '', port: 22, keyPath: '' };
+
+type Section = 'general' | 'appearance' | 'sessions' | 'remote' | 'danger';
 
 export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS });
@@ -15,6 +25,9 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [verifyResult, setVerifyResult] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [detectedPath, setDetectedPath] = useState('');
+  const [remoteHosts, setRemoteHosts] = useState<RemoteHost[]>([]);
+  const [editingHost, setEditingHost] = useState<RemoteHost | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number>(-1); // -1 = new
 
   // Load settings on open
   useEffect(() => {
@@ -25,7 +38,11 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       }
     });
     window.electronAPI.app.getClaudePath().then(setDetectedPath);
+    window.electronAPI.store.get('remoteHosts').then((val) => {
+      if (Array.isArray(val)) setRemoteHosts(val as RemoteHost[]);
+    });
     setVerifyResult(null);
+    setEditingHost(null);
   }, [isOpen]);
 
   const save = useCallback(
@@ -69,6 +86,7 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
   const navItems: { key: Section; label: string }[] = [
     { key: 'general', label: 'General' },
+    { key: 'remote', label: 'Remote Hosts' },
     { key: 'appearance', label: 'Appearance' },
     { key: 'sessions', label: 'Session Defaults' },
     { key: 'danger', label: 'Danger Zone' },
@@ -170,6 +188,132 @@ export default function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     </button>
                   </div>
                 </div>
+              </>
+            )}
+
+            {section === 'remote' && (
+              <>
+                {editingHost ? (
+                  /* Edit/Add form */
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium text-slate-300">
+                      {editingIndex === -1 ? 'Add Remote Host' : 'Edit Remote Host'}
+                    </h3>
+                    {[
+                      { key: 'name', label: 'Display Name', placeholder: 'My Server' },
+                      { key: 'user', label: 'Username', placeholder: 'ubuntu' },
+                      { key: 'host', label: 'Host', placeholder: '192.168.1.100 or myserver.com' },
+                    ].map(({ key, label, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-xs text-slate-400 mb-1">{label}</label>
+                        <input
+                          type="text"
+                          value={(editingHost as any)[key]}
+                          onChange={(e) => setEditingHost({ ...editingHost, [key]: e.target.value })}
+                          placeholder={placeholder}
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="block text-xs text-slate-400 mb-1">Port</label>
+                        <input
+                          type="number"
+                          value={editingHost.port}
+                          onChange={(e) => setEditingHost({ ...editingHost, port: parseInt(e.target.value) || 22 })}
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs text-slate-400 mb-1">SSH Key Path <span className="text-slate-600">(optional)</span></label>
+                        <input
+                          type="text"
+                          value={editingHost.keyPath}
+                          onChange={(e) => setEditingHost({ ...editingHost, keyPath: e.target.value })}
+                          placeholder="~/.ssh/id_rsa"
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={() => {
+                          if (!editingHost.user || !editingHost.host) return;
+                          const next = [...remoteHosts];
+                          const h = { ...editingHost, name: editingHost.name || `${editingHost.user}@${editingHost.host}` };
+                          if (editingIndex === -1) {
+                            next.push(h);
+                          } else {
+                            next[editingIndex] = h;
+                          }
+                          setRemoteHosts(next);
+                          window.electronAPI.store.set('remoteHosts', next);
+                          setEditingHost(null);
+                        }}
+                        disabled={!editingHost.user || !editingHost.host}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm rounded-lg transition-colors"
+                      >
+                        {editingIndex === -1 ? 'Add' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditingHost(null)}
+                        className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Host list */
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-slate-500">
+                        SSH connections for discovering and resuming remote Claude Code sessions.
+                      </p>
+                      <button
+                        onClick={() => { setEditingHost({ ...emptyHost }); setEditingIndex(-1); }}
+                        className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors flex-shrink-0"
+                      >
+                        + Add Host
+                      </button>
+                    </div>
+                    {remoteHosts.length === 0 ? (
+                      <p className="text-sm text-slate-600 text-center py-4">No remote hosts configured</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {remoteHosts.map((h, i) => (
+                          <div key={i} className="flex items-center justify-between px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg">
+                            <div>
+                              <div className="text-sm text-slate-200">{h.name || `${h.user}@${h.host}`}</div>
+                              <div className="text-xs text-slate-500">{h.user}@{h.host}{h.port !== 22 ? `:${h.port}` : ''}</div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => { setEditingHost({ ...h }); setEditingIndex(i); }}
+                                className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Remove ${h.name || h.host}?`)) {
+                                    const next = remoteHosts.filter((_, j) => j !== i);
+                                    setRemoteHosts(next);
+                                    window.electronAPI.store.set('remoteHosts', next);
+                                  }
+                                }}
+                                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
 

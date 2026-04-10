@@ -95,8 +95,11 @@ export function discoverSessions(): SessionInfo[] {
     const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
 
     for (const file of jsonlFiles) {
-      const filePath = path.join(projPath, file);
       const sessionId = file.replace('.jsonl', '');
+      // Skip internal sub-agent/compact sessions
+      if (/^(agent-|compact-)/.test(sessionId)) continue;
+
+      const filePath = path.join(projPath, file);
       const stat = fs.statSync(filePath);
 
       const { firstMessage, cwd, messageCount } = extractFirstUserMessage(filePath);

@@ -8,9 +8,10 @@ interface SessionViewProps {
   cwd: string;
   active: boolean;
   alreadySpawned?: boolean;
+  remote?: string; // 'user@host' if remote session
 }
 
-export default function SessionView({ sessionId, cwd, active, alreadySpawned }: SessionViewProps) {
+export default function SessionView({ sessionId, cwd, active, alreadySpawned, remote }: SessionViewProps) {
   const [inputText, setInputText] = useState('');
   const [showContext, setShowContext] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -24,7 +25,7 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned }: 
     kill,
     resize,
     spawn,
-  } = usePty({ sessionId, cwd, skipSpawn: alreadySpawned });
+  } = usePty({ sessionId, cwd, skipSpawn: alreadySpawned, remote });
 
   // Focus input when tab becomes active
   useEffect(() => {

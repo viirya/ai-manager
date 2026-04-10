@@ -17,10 +17,11 @@ interface LiveTab {
   cwd: string;
   alreadySpawned?: boolean;
   type?: 'session' | 'dialogue'; // default: 'session'
+  remote?: string; // 'user@host' if remote session
 }
 
 export default function App() {
-  const { sessions, loading, refresh, deleteSession } = useSessions();
+  const { sessions, loading, remoteErrors, refresh, deleteSession, deleteRemoteSession } = useSessions();
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [liveTabs, setLiveTabs] = useState<LiveTab[]>([]);
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
@@ -131,7 +132,12 @@ export default function App() {
       if (existing) {
         setActiveTabId(session.id);
       } else {
-        setLiveTabs((prev) => [...prev, { sessionId: session.id, title: getTitle(session), cwd: session.cwd }]);
+        setLiveTabs((prev) => [...prev, {
+          sessionId: session.id,
+          title: getTitle(session),
+          cwd: session.cwd,
+          remote: session.remote,
+        }]);
         setActiveTabId(session.id);
       }
     },
@@ -164,14 +170,22 @@ export default function App() {
       const scrollTop = scrollEl?.scrollTop ?? 0;
 
       if (liveSessionIds.has(session.id)) handleCloseTab(session.id);
-      await deleteSession(session.filePath);
+
+      if (session.remote) {
+        const result = await deleteRemoteSession(session.remote, session.filePath);
+        if (!result.success) {
+          alert(`Failed to delete remote session: ${result.error}`);
+        }
+      } else {
+        await deleteSession(session.filePath);
+      }
 
       requestAnimationFrame(() => {
         const el = document.querySelector('[data-sidebar-list]')?.firstElementChild as HTMLElement | null;
         if (el) el.scrollTop = scrollTop;
       });
     },
-    [deleteSession, liveSessionIds, handleCloseTab]
+    [deleteSession, deleteRemoteSession, liveSessionIds, handleCloseTab]
   );
 
   const handleNewSessionConfirm = useCallback(
@@ -320,6 +334,7 @@ export default function App() {
             onContextMenu={handleContextMenu}
             onOpenSettings={() => setShowSettings(true)}
             loading={loading}
+            remoteErrors={remoteErrors}
             searchRef={searchRef}
           />
           <div
@@ -420,6 +435,7 @@ export default function App() {
                     cwd={tab.cwd}
                     active={isActive}
                     alreadySpawned={tab.alreadySpawned}
+                    remote={tab.remote}
                   />
                 </div>
               );
