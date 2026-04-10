@@ -83,15 +83,13 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
     // (xterm.js buffer API is unreliable when Claude Code redraws its TUI)
     const getViewport = () => termRef.current?.querySelector('.xterm-viewport') as HTMLElement | null;
 
-    // Track scroll position via polling
+    // Track scroll position via polling — use buffer API for detection
+    // (DOM scrollHeight may not work with WebGL renderer)
     const scrollCheckInterval = setInterval(() => {
-      const vp = getViewport();
-      if (vp) {
-        const distFromBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight;
-        const scrolledUp = distFromBottom > 50;
-        userScrolledUpRef.current = scrolledUp;
-        setShowScrollDown(scrolledUp);
-      }
+      const buf = terminal.buffer.active;
+      const atBottom = buf.viewportY >= buf.baseY;
+      userScrolledUpRef.current = !atBottom;
+      setShowScrollDown(!atBottom);
     }, 300);
 
     // Subscribe to PTY output — preserve DOM scroll position if user scrolled up
