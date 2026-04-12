@@ -74,9 +74,9 @@ export async function discoverRemoteSessions(host: RemoteHostConfig): Promise<Se
   const hk = hostKey(host);
 
   try {
-    // Single SSH call: list newest 50 files and read first 20 lines of each
+    // Single SSH call: list all session files, skip agent-*/compact-*, read first 20 lines of each
     const script = `
-      find ~/.claude/projects -name "*.jsonl" -type f 2>/dev/null | head -50 | while read f; do
+      find ~/.claude/projects -name "*.jsonl" -type f 2>/dev/null | grep -v -E '/(agent-|compact-)' | while read f; do
         echo "===FILE=== $f"
         head -20 "$f" 2>/dev/null
       done
