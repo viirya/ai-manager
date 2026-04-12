@@ -93,8 +93,10 @@ export default function Sidebar({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [locationFilter, setLocationFilter] = useState<'all' | 'local' | 'remote'>('all');
   const listContainerRef = useRef<HTMLDivElement>(null);
   const [listHeight, setListHeight] = useState(400);
+  const hasRemote = sessions.some((s) => s.remote);
 
   const getTitle = useCallback(
     (session: SessionInfo) => sessionMeta[session.id]?.customTitle || session.title,
@@ -103,6 +105,8 @@ export default function Sidebar({
 
   const filtered = useMemo(() => {
     let list = sessions;
+    if (locationFilter === 'local') list = list.filter((s) => !s.remote);
+    if (locationFilter === 'remote') list = list.filter((s) => !!s.remote);
     if (!showArchived) list = list.filter((s) => !sessionMeta[s.id]?.archived);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -119,7 +123,7 @@ export default function Sidebar({
       if (aPinned !== bPinned) return bPinned - aPinned;
       return b.lastActive - a.lastActive;
     });
-  }, [sessions, search, sessionMeta, showArchived, getTitle]);
+  }, [sessions, search, sessionMeta, showArchived, locationFilter, getTitle]);
 
   const archivedCount = useMemo(
     () => sessions.filter((s) => sessionMeta[s.id]?.archived).length,
@@ -295,6 +299,25 @@ export default function Sidebar({
           )}
         </div>
       </div>
+
+      {/* Location filter */}
+      {hasRemote && (
+        <div className="px-3 pb-2 flex gap-1 no-drag">
+          {(['all', 'local', 'remote'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setLocationFilter(f)}
+              className={`px-2.5 py-1 text-xs rounded transition-colors capitalize ${
+                locationFilter === f
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Archived toggle */}
       {archivedCount > 0 && (
