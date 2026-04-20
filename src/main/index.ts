@@ -217,6 +217,11 @@ function buildAppMenu() {
       label: 'View',
       submenu: [
         {
+          label: 'Session Overview',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => mainWindow?.webContents.send('menu:overview'),
+        },
+        {
           label: 'Toggle Context (CLAUDE.md)',
           accelerator: 'CmdOrCtrl+E',
           click: () => mainWindow?.webContents.send('menu:toggleContext'),

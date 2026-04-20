@@ -8,6 +8,7 @@ import SettingsPanel from './components/SettingsPanel';
 import AboutDialog from './components/AboutDialog';
 import DialogueSetupModal from './components/DialogueSetupModal';
 import DialogueView from './components/DialogueView';
+import OverviewPanel from './components/OverviewPanel';
 import { useSessions } from './hooks/useSessions';
 import type { SessionInfo, SessionMeta } from '../shared/types';
 
@@ -28,6 +29,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showDialogueSetup, setShowDialogueSetup] = useState(false);
+  const [showOverview, setShowOverview] = useState(false);
   const [sessionMeta, setSessionMeta] = useState<Record<string, SessionMeta>>({});
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -103,6 +105,7 @@ export default function App() {
         return !s;
       });
     }));
+    unsubs.push(window.electronAPI.on('menu:overview', () => setShowOverview(s => !s)));
     unsubs.push(window.electronAPI.on('menu:settings', () => setShowSettings(true)));
     unsubs.push(window.electronAPI.on('menu:about', () => setShowAbout(true)));
     unsubs.push(window.electronAPI.on('menu:toggleRaw', () => {
@@ -461,6 +464,18 @@ export default function App() {
       />
       <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <AboutDialog isOpen={showAbout} onClose={() => setShowAbout(false)} />
+      <OverviewPanel
+        isOpen={showOverview}
+        liveSessions={liveTabs.filter(t => t.type !== 'dialogue').map(t => ({
+          sessionId: t.sessionId,
+          title: sessionMeta[t.sessionId]?.customTitle || t.title,
+          cwd: t.cwd,
+          remote: t.remote,
+        }))}
+        activeTabId={activeTabId}
+        onSelect={setActiveTabId}
+        onClose={() => setShowOverview(false)}
+      />
     </div>
   );
 }
