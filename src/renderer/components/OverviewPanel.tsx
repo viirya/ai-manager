@@ -64,18 +64,14 @@ export default function OverviewPanel({
   const [search, setSearch] = useState('');
   const buffersRef = useRef<Record<string, string>>({});
 
-  // Stable session ID list to avoid effect re-running on every render
   const sessionIdKey = liveSessions.map((s) => s.sessionId).join(',');
 
-  // Subscribe to PTY data — keep buffers persistent across re-renders
+  // Always subscribe to PTY data so buffers accumulate even when panel is closed
   useEffect(() => {
-    if (!isOpen) return;
-
     const ids = sessionIdKey.split(',').filter(Boolean);
     if (ids.length === 0) return;
 
     const unsubs: (() => void)[] = [];
-
     for (const id of ids) {
       if (!buffersRef.current[id]) buffersRef.current[id] = '';
       const unsub = window.electronAPI.pty.onData(id, (data: string) => {
@@ -84,8 +80,18 @@ export default function OverviewPanel({
       unsubs.push(unsub);
     }
 
-    // Update previews periodically
-    const interval = setInterval(() => {
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [sessionIdKey]);
+
+  // Update preview text only when panel is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Immediate update on open
+    const updatePreviews = () => {
+      const ids = sessionIdKey.split(',').filter(Boolean);
       const next: Record<string, string> = {};
       for (const id of ids) {
         const buf = buffersRef.current[id] || '';
@@ -94,12 +100,12 @@ export default function OverviewPanel({
         next[id] = lines.slice(-6).join('\n');
       }
       setPreviews((prev) => ({ ...prev, ...next }));
-    }, 500);
-
-    return () => {
-      unsubs.forEach((u) => u());
-      clearInterval(interval);
     };
+
+    updatePreviews();
+    const interval = setInterval(updatePreviews, 500);
+
+    return () => clearInterval(interval);
   }, [isOpen, sessionIdKey]);
 
   const handleSelect = useCallback(
