@@ -288,7 +288,13 @@ export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false, re
       if (sentMessagesRef.current.length > 20) {
         sentMessagesRef.current = sentMessagesRef.current.slice(-20);
       }
-      window.electronAPI.pty.write(sessionId, text + '\r');
+      // Use bracketed paste mode so Claude Code receives the entire text as
+      // a single paste, preventing long text from being split or dropped.
+      // Send Enter separately with a delay so Claude Code finishes processing the paste.
+      window.electronAPI.pty.write(sessionId, '\x1b[200~' + text + '\x1b[201~');
+      setTimeout(() => {
+        window.electronAPI.pty.write(sessionId, '\r');
+      }, 100);
       setIsWaiting(false);
     },
     [sessionId, isLive]
