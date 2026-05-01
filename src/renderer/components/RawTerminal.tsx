@@ -122,20 +122,51 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
     });
     resizeObserver.observe(termRef.current);
 
-    // Redraw: jiggle PTY size to force the app to repaint
+    // Redraw: jiggle PTY size + send Ctrl+L to force a complete repaint
     const handleRedraw = () => {
       const cols = terminal.cols;
       const rows = terminal.rows;
-      window.electronAPI.pty.resize(sessionId, cols - 1, rows);
+      // First shrink to invalidate the layout
+      window.electronAPI.pty.resize(sessionId, Math.max(1, cols - 2), rows);
       setTimeout(() => {
+        // Restore size — app should redraw from the resize event
         window.electronAPI.pty.resize(sessionId, cols, rows);
-      }, 50);
+      }, 80);
+      setTimeout(() => {
+        // Send Ctrl+L (form feed) as a backup redraw signal
+        window.electronAPI.pty.write(sessionId, '\x0c');
+      }, 200);
     };
     window.addEventListener('redraw-terminal', handleRedraw);
+
+    // Reset scroll preservation when user submits input (so they see the response)
+    const handleResetScroll = (e: Event) => {
+      const targetId = (e as CustomEvent).detail;
+      if (targetId !== sessionId) return;
+      userScrolledUpRef.current = false;
+      setShowScrollDown(false);
+      requestAnimationFrame(() => {
+        terminal.scrollToBottom();
+      });
+    };
+    window.addEventListener('reset-terminal-scroll', handleResetScroll);
+
+    // Quote selection: grab selected text and dispatch to input bar
+    const handleQuoteSelection = () => {
+      const selection = terminal.getSelection();
+      if (selection) {
+        const quoted = selection.split('\n').map((l: string) => `> ${l}`).join('\n');
+        window.dispatchEvent(new CustomEvent('quote-selection', { detail: quoted }));
+        terminal.clearSelection();
+      }
+    };
+    window.addEventListener('quote-terminal-selection', handleQuoteSelection);
 
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('redraw-terminal', handleRedraw);
+      window.removeEventListener('quote-terminal-selection', handleQuoteSelection);
+      window.removeEventListener('reset-terminal-scroll', handleResetScroll);
       clearInterval(scrollCheckInterval);
       resizeObserver.disconnect();
       if (unsubRef.current) unsubRef.current();

@@ -296,6 +296,9 @@ export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false, re
         window.electronAPI.pty.write(sessionId, '\r');
       }, 100);
       setIsWaiting(false);
+      // Notify the terminal to scroll to bottom — user just sent input,
+      // they want to see the response, not stay scrolled up
+      window.dispatchEvent(new CustomEvent('reset-terminal-scroll', { detail: sessionId }));
     },
     [sessionId, isLive]
   );

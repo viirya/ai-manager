@@ -43,6 +43,20 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned, re
     return () => window.removeEventListener('toggle-context-panel', handler);
   }, [active]);
 
+  // Listen for quote-selection event from RawTerminal
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if (!active) return;
+      const quoted = (e as CustomEvent).detail as string;
+      if (quoted) {
+        setInputText((prev) => prev ? prev + '\n' + quoted + '\n' : quoted + '\n');
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('quote-selection', handler);
+    return () => window.removeEventListener('quote-selection', handler);
+  }, [active]);
+
   const inputHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');

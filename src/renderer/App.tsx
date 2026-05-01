@@ -96,6 +96,9 @@ export default function App() {
     unsubs.push(window.electronAPI.on('menu:redrawTerminal', () => {
       window.dispatchEvent(new CustomEvent('redraw-terminal'));
     }));
+    unsubs.push(window.electronAPI.on('menu:quoteSelection', () => {
+      window.dispatchEvent(new CustomEvent('quote-terminal-selection'));
+    }));
     unsubs.push(window.electronAPI.on('menu:toggleContext', () => {
       window.dispatchEvent(new CustomEvent('toggle-context-panel'));
     }));

@@ -205,6 +205,11 @@ function buildAppMenu() {
         { role: 'selectAll' as const },
         { type: 'separator' as const },
         {
+          label: 'Quote Selection',
+          accelerator: 'CmdOrCtrl+Shift+Q',
+          click: () => mainWindow?.webContents.send('menu:quoteSelection'),
+        },
+        {
           label: 'Find in Sessions',
           accelerator: 'CmdOrCtrl+F',
           click: () => mainWindow?.webContents.send('menu:focusSearch'),
