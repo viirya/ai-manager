@@ -79,20 +79,31 @@ export default function SessionView({ sessionId, cwd, active, alreadySpawned, re
         e.preventDefault();
         handleSend();
       }
-      // Arrow Up: browse input history, save current input on first press
+      // Arrow Up: browse input history only when cursor is on the first line
+      // (so multi-line cursor navigation works naturally)
       if (e.key === 'ArrowUp' && inputHistoryRef.current.length > 0) {
+        const ta = e.target as HTMLTextAreaElement;
+        const beforeCursor = ta.value.slice(0, ta.selectionStart);
+        const onFirstLine = !beforeCursor.includes('\n');
+        if (!onFirstLine) return; // let textarea move cursor up
+
         e.preventDefault();
         const history = inputHistoryRef.current;
         if (historyIndexRef.current === -1) {
-          savedInputRef.current = (e.target as HTMLTextAreaElement).value;
+          savedInputRef.current = ta.value;
           historyIndexRef.current = history.length - 1;
         } else if (historyIndexRef.current > 0) {
           historyIndexRef.current--;
         }
         setInputText(history[historyIndexRef.current]);
       }
-      // Arrow Down: only when browsing history
+      // Arrow Down: only when browsing history AND cursor is on the last line
       if (e.key === 'ArrowDown' && historyIndexRef.current !== -1) {
+        const ta = e.target as HTMLTextAreaElement;
+        const afterCursor = ta.value.slice(ta.selectionEnd);
+        const onLastLine = !afterCursor.includes('\n');
+        if (!onLastLine) return; // let textarea move cursor down
+
         e.preventDefault();
         const history = inputHistoryRef.current;
         if (historyIndexRef.current < history.length - 1) {
