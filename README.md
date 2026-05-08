@@ -46,6 +46,24 @@ Three modes are available: **Pair** (two sessions ping-pong back and forth), **P
 
 The dialogue runs until one of: max turn count reached, a configurable stop keyword appears in a response, a session exits, or you manually stop it. A dedicated Dialogue View shows the full transcript with color-coded turns, an active-session indicator, and Pause/Resume/Stop controls.
 
+### Remote Sessions (SSH)
+
+Configure SSH connections in **Settings > Remote Hosts** (host, user, port, optional key path) to discover and manage sessions on remote machines. Remote sessions appear in the sidebar with a cyan `[user@host]` label and can be filtered via the **All / Local / Remote** buttons. You can resume, create (with manual remote path entry), and delete remote sessions just like local ones — the app runs `ssh -t` with the remote user's login shell so `nvm`/`PATH` are initialized correctly.
+
+The discovery process scans `~/.claude/projects/` over SSH on each configured host (asynchronously, so a slow or unreachable host doesn't block the local session list). SSH connections set `ClearAllForwardings=yes` to avoid clobbering existing port forwards configured in your `~/.ssh/config`.
+
+### Session Overview
+
+Press `Cmd+O` for a dashboard-style grid of all live sessions. Each card shows the session title, working directory, and a live preview of the most recent terminal output (cleaned of UI artifacts, updated every 500ms). Click any card to switch to that tab. The active session has an indigo border. PTY data is collected in the background even when the panel is closed, so previews show real content the moment you open it.
+
+### Quote Selection
+
+Select text in any terminal and press `Cmd+Shift+Q` to quote it into the input bar. Each line gets prefixed with `> ` (Markdown blockquote style). The cursor lands after the quoted block so you can immediately type your reply or follow-up question.
+
+### Input History
+
+In the input bar, press `↑` to recall previous messages (per-session) and `↓` to go forward. Multi-line editing works naturally — history navigation only triggers on the first/last line of the textarea. Your in-progress input is preserved when you start browsing and restored when you return to the bottom.
+
 ### macOS Native
 
 Full menu bar (Session, Edit, View, Window), native right-click context menus on sidebar items, window position/size persistence across restarts, and a resizable sidebar with drag handle.
@@ -110,9 +128,12 @@ ELECTRON_RUN_AS_NODE= npx electron .
 | `Cmd+,` | Open settings |
 | `Cmd+E` | Toggle CLAUDE.md context panel |
 | `Cmd+B` | Toggle sidebar |
+| `Cmd+O` | Session Overview |
 | `Cmd+R` | Redraw terminal |
+| `Cmd+Shift+Q` | Quote selected terminal text into input |
 | `Cmd+Shift+[` | Previous tab |
 | `Cmd+Shift+]` | Next tab |
+| `↑` / `↓` (in input) | Browse input history |
 
 ## Project Structure
 
@@ -123,22 +144,24 @@ src/
 │   ├── preload.ts         # contextBridge — exposes electronAPI to renderer
 │   ├── pty.ts             # PTY manager — spawns/tracks claude processes via node-pty
 │   ├── dialogue.ts        # DialogueManager — routes output between sessions
-│   └── sessions.ts        # Session discovery — reads ~/.claude/ JSONL files
+│   ├── sessions.ts        # Local session discovery — reads ~/.claude/ JSONL files
+│   └── remote-sessions.ts # Remote session discovery + delete via SSH
 │
 ├── renderer/              # React UI (bundled by Vite)
 │   ├── App.tsx            # Root component — tabs, sidebar resize, menu event listeners
 │   ├── main.tsx           # React entry point
 │   ├── components/
 │   │   ├── AboutDialog.tsx
+│   │   ├── ContextPanel.tsx        # CLAUDE.md editor panel
 │   │   ├── DialogueSetupModal.tsx  # Dialogue config: mode, sessions, roles, stop conditions
 │   │   ├── DialogueView.tsx        # Dialogue transcript with controls
 │   │   ├── EmptyState.tsx
-│   │   ├── NewSessionModal.tsx
-│   │   ├── ContextPanel.tsx      # CLAUDE.md editor panel
-│   │   ├── RawTerminal.tsx      # xterm.js wrapper with FitAddon + WebGL
-│   │   ├── SessionView.tsx      # Terminal + input bar + context panel
-│   │   ├── SettingsPanel.tsx
-│   │   ├── Sidebar.tsx          # Virtualized session list (react-window)
+│   │   ├── NewSessionModal.tsx     # New session (local or remote)
+│   │   ├── OverviewPanel.tsx       # Cmd+O grid of live sessions with previews
+│   │   ├── RawTerminal.tsx         # xterm.js wrapper with FitAddon + WebGL
+│   │   ├── SessionView.tsx         # Terminal + input bar + context panel
+│   │   ├── SettingsPanel.tsx       # General, Remote Hosts, Appearance, Defaults, Danger
+│   │   ├── Sidebar.tsx             # Virtualized session list with All/Local/Remote filter
 │   │   └── TabBar.tsx
 │   ├── hooks/
 │   │   ├── usePty.ts           # PTY lifecycle, output parsing, echo suppression
@@ -189,6 +212,7 @@ A 1.5s delay after sending input skips the PTY echo and Claude Code's UI initial
 - [ ] PR review mode — paste a GitHub PR URL, auto-load the diff as context into a new session
 - [ ] Full-text search across session message content
 - [ ] Export conversation as Markdown
+- [ ] Browse remote sessions list directly (currently lists are read on each launch via SSH)
 
 ## License
 
