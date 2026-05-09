@@ -49,7 +49,7 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
       fontSize: 13,
       lineHeight: 1.3,
       cursorBlink: true,
-      scrollback: 10000,
+      scrollback: 3000,
     });
 
     const fitAddon = new FitAddon();

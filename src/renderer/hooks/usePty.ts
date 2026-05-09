@@ -218,7 +218,9 @@ export function usePty({ sessionId, cwd, autoSpawn = true, skipSpawn = false, re
         rawBufferRef.current = '';
       }
 
-      rawOutputRef.current += buffered;
+      // Cap buffer to ~500KB to limit memory growth on long sessions
+      const next = rawOutputRef.current + buffered;
+      rawOutputRef.current = next.length > 500_000 ? next.slice(-500_000) : next;
       setRawOutput(rawOutputRef.current);
 
       setIsWaiting(false);
