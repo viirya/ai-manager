@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import * as os from 'os';
 import * as fs from 'fs';
+import * as path from 'path';
 import { execSync } from 'child_process';
 
 // node-pty must be required (not imported) for native module compat
