@@ -37,6 +37,30 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement | null>(null);
   const resizingRef = useRef(false);
 
+  // Restore tabs after sessions finish loading
+  const tabsRestoredRef = useRef(false);
+  useEffect(() => {
+    if (loading || tabsRestoredRef.current) return;
+    tabsRestoredRef.current = true;
+
+    Promise.all([
+      window.electronAPI.store.get('openTabs'),
+      window.electronAPI.store.get('activeTabId'),
+    ]).then(([tabsVal, activeVal]) => {
+      if (!Array.isArray(tabsVal) || tabsVal.length === 0) return;
+      const saved = tabsVal as Array<{ sessionId: string; title: string; cwd: string; remote?: string }>;
+      // Keep only tabs whose session still exists locally.
+      // Remote tabs are always kept — remote sessions load after this point.
+      const localIds = new Set(sessions.filter(s => !s.remote).map(s => s.id));
+      const toRestore = saved.filter(t => t.remote || localIds.has(t.sessionId));
+      if (toRestore.length === 0) return;
+      setLiveTabs(toRestore);
+      const savedActive = typeof activeVal === 'string' ? activeVal : null;
+      const active = toRestore.find(t => t.sessionId === savedActive) ?? toRestore[toRestore.length - 1];
+      setActiveTabId(active.sessionId);
+    });
+  }, [loading, sessions]);
+
   // Load persisted state
   useEffect(() => {
     window.electronAPI.store.get('sessionMeta').then((val) => {
@@ -124,6 +148,18 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // Persist open tabs and active tab whenever they change (exclude dialogue tabs)
+  useEffect(() => {
+    const toSave = liveTabs
+      .filter(t => t.type !== 'dialogue')
+      .map(({ sessionId, title, cwd, remote }) => ({ sessionId, title, cwd, remote }));
+    window.electronAPI.store.set('openTabs', toSave);
+  }, [liveTabs]);
+
+  useEffect(() => {
+    window.electronAPI.store.set('activeTabId', activeTabId ?? null);
+  }, [activeTabId]);
 
   const liveSessionIds = new Set(liveTabs.filter(t => t.type !== 'dialogue').map((t) => t.sessionId));
 
