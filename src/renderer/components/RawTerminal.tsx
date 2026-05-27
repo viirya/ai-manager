@@ -17,6 +17,10 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
   const unsubRef = useRef<(() => void) | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const userScrolledUpRef = useRef(false);
+  // Alternate screen buffer active (e.g. Claude Code fullscreen TUI).
+  // Scroll preservation must be suppressed while in alternate screen — it has
+  // no scrollback and the diff-based redraws fight with our scrollTop restore.
+  const altScreenRef = useRef(false);
 
   useEffect(() => {
     if (!termRef.current) return;
@@ -79,6 +83,26 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
       window.electronAPI.pty.write(sessionId, data);
     });
 
+    // Track alternate screen buffer state via DEC private mode sequences.
+    // \x1b[?1049h = enter alt screen (Claude Code fullscreen TUI)
+    // \x1b[?1049l = leave alt screen
+    // While in alt screen: no scrollback, no scroll preservation, hide the
+    // scroll-down button.
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'h' }, (params) => {
+      if (params.length > 0 && params[0] === 1049) {
+        altScreenRef.current = true;
+        userScrolledUpRef.current = false;
+        setShowScrollDown(false);
+      }
+      return false;
+    });
+    terminal.parser.registerCsiHandler({ prefix: '?', final: 'l' }, (params) => {
+      if (params.length > 0 && params[0] === 1049) {
+        altScreenRef.current = false;
+      }
+      return false;
+    });
+
     // Find the viewport DOM element for scroll preservation
     // (xterm.js buffer API is unreliable when Claude Code redraws its TUI)
     const getViewport = () => termRef.current?.querySelector('.xterm-viewport') as HTMLElement | null;
@@ -86,24 +110,46 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
     // Track scroll position via polling — use buffer API for detection
     // (DOM scrollHeight may not work with WebGL renderer)
     const scrollCheckInterval = setInterval(() => {
+      if (altScreenRef.current) return;
       const buf = terminal.buffer.active;
       const atBottom = buf.viewportY >= buf.baseY;
       userScrolledUpRef.current = !atBottom;
       setShowScrollDown(!atBottom);
     }, 300);
 
-    // Subscribe to PTY output — preserve DOM scroll position if user scrolled up
-    unsubRef.current = window.electronAPI.pty.onData(sessionId, (data: string) => {
-      if (userScrolledUpRef.current) {
+    // Subscribe to PTY output — batch writes within the same animation frame to
+    // reduce xterm.js/WebGL repaint frequency, especially in fullscreen TUI mode
+    // where Claude Code sends many small escape sequences per redraw.
+    //
+    // In alt-screen mode skip scroll preservation entirely: the TUI manages its
+    // own viewport and our scrollTop restore would corrupt the diff-based redraws.
+    let pendingChunks: string[] = [];
+    let rafPending = false;
+
+    const flushWrites = () => {
+      rafPending = false;
+      if (pendingChunks.length === 0) return;
+      const data = pendingChunks.join('');
+      pendingChunks = [];
+
+      if (userScrolledUpRef.current && !altScreenRef.current) {
         const vp = getViewport();
         const savedScrollTop = vp?.scrollTop ?? 0;
-        terminal.write(data);
-        // Restore after xterm.js processes the write
-        requestAnimationFrame(() => {
-          if (vp) vp.scrollTop = savedScrollTop;
+        terminal.write(data, () => {
+          if (vp && userScrolledUpRef.current && !altScreenRef.current) {
+            vp.scrollTop = savedScrollTop;
+          }
         });
       } else {
         terminal.write(data);
+      }
+    };
+
+    unsubRef.current = window.electronAPI.pty.onData(sessionId, (data: string) => {
+      pendingChunks.push(data);
+      if (!rafPending) {
+        rafPending = true;
+        requestAnimationFrame(flushWrites);
       }
     });
 
@@ -162,6 +208,24 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
     };
     window.addEventListener('quote-terminal-selection', handleQuoteSelection);
 
+    // In alternate screen mode, xterm.js tries to scroll the viewport on wheel
+    // events even though alt screen has no scrollback — this adds latency before
+    // the event reaches the PTY. Intercept wheel events on the terminal element
+    // and forward them directly as PTY input (up/down arrow sequences) so the
+    // TUI app receives them with no xterm.js overhead.
+    const handleWheel = (e: WheelEvent) => {
+      if (!altScreenRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Each notch of scroll sends one arrow key; scale to deltaY magnitude.
+      const lines = Math.max(1, Math.round(Math.abs(e.deltaY) / 40));
+      const seq = e.deltaY < 0 ? '\x1b[A' : '\x1b[B';
+      for (let i = 0; i < lines; i++) {
+        window.electronAPI.pty.write(sessionId, seq);
+      }
+    };
+    termRef.current.addEventListener('wheel', handleWheel, { passive: false });
+
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('redraw-terminal', handleRedraw);
@@ -169,6 +233,7 @@ export default function RawTerminal({ sessionId, active, onResize }: RawTerminal
       window.removeEventListener('reset-terminal-scroll', handleResetScroll);
       clearInterval(scrollCheckInterval);
       resizeObserver.disconnect();
+      termRef.current?.removeEventListener('wheel', handleWheel);
       if (unsubRef.current) unsubRef.current();
       terminal.dispose();
     };
