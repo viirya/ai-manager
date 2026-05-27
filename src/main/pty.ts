@@ -81,7 +81,16 @@ function spawnClaudePty(
   sessionId: string,
 ): any {
   const claudePath = detectClaudeBinary();
-  const workDir = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
+  // Walk up to find the nearest existing ancestor — handles deleted worktrees
+  // where the session's cwd no longer exists but a parent (the repo root) does.
+  let workDir = os.homedir();
+  if (cwd) {
+    let dir = cwd;
+    while (dir && dir !== path.dirname(dir)) {
+      if (fs.existsSync(dir)) { workDir = dir; break; }
+      dir = path.dirname(dir);
+    }
+  }
   const env = buildPtyEnv();
 
   // Spawn the user's login shell, then exec claude inside it.
