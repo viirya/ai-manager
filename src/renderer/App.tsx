@@ -149,8 +149,11 @@ export default function App() {
     });
   }, []);
 
-  // Persist open tabs and active tab whenever they change (exclude dialogue tabs)
+  // Persist open tabs and active tab whenever they change (exclude dialogue tabs).
+  // Skip writes until restore has run — otherwise the initial empty liveTabs
+  // would overwrite the stored tabs before we get a chance to read them back.
   useEffect(() => {
+    if (!tabsRestoredRef.current) return;
     const toSave = liveTabs
       .filter(t => t.type !== 'dialogue')
       .map(({ sessionId, title, cwd, remote }) => ({ sessionId, title, cwd, remote }));
@@ -158,6 +161,7 @@ export default function App() {
   }, [liveTabs]);
 
   useEffect(() => {
+    if (!tabsRestoredRef.current) return;
     window.electronAPI.store.set('activeTabId', activeTabId ?? null);
   }, [activeTabId]);
 
