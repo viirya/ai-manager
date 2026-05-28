@@ -8,8 +8,27 @@
     "dev:renderer": "vite",
     "dev:main": "tsc -p tsconfig.main.json && ELECTRON_RUN_AS_NODE= electron .",
     "build": "tsc -p tsconfig.main.json && vite build",
+    "package": "npm run build && electron-builder --mac",
     "start": "ELECTRON_RUN_AS_NODE= electron .",
     "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true"
+  },
+  "build": {
+    "appId": "org.viirya.ai-manager",
+    "productName": "AI Manager",
+    "publish": null,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [{ "target": "dmg", "arch": ["arm64"] }]
+    },
+    "files": [
+      "dist/**/*",
+      "index.html"
+    ],
+    "extraResources": [],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-pty/**"
+    ]
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

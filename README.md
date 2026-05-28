@@ -113,6 +113,22 @@ npm run build
 ELECTRON_RUN_AS_NODE= npx electron .
 ```
 
+To package as a standalone macOS app (`.dmg`):
+
+```bash
+npm run package
+```
+
+The output will be in `dist/AI Manager-0.1.0-arm64.dmg` and `dist/mac-arm64/AI Manager.app`.
+
+**Python note:** `node-pty` requires Python with `distutils` during native module compilation. On Python 3.12+ `distutils` was removed, so you need `setuptools`. To avoid installing it globally:
+
+```bash
+python3 -m venv /tmp/build-venv
+/tmp/build-venv/bin/pip install setuptools
+PYTHON=/tmp/build-venv/bin/python3 npm run package
+```
+
 > **Note:** If you use Claude Code's VS Code extension, your shell likely has `ELECTRON_RUN_AS_NODE=1` set. This breaks Electron's ability to load its own modules. You must unset it before launching: prefix the electron command with `ELECTRON_RUN_AS_NODE=` (set to empty). The dev scripts in `package.json` handle this automatically.
 
 > **Note:** Vite is configured with `strictPort: true` — if port 5173 is already occupied, it will fail with an error instead of silently switching to another port. Kill the old process first: `kill $(lsof -ti:5173)`
